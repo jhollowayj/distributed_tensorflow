@@ -5,6 +5,7 @@ import networks
 import zmqconfig
 import Ops
 import numpy as np
+import time
 
 # TODO add verbose flags for logging everything
 class Object(object):
@@ -14,10 +15,11 @@ class ModDNN_ZMQ_Server:
     def __init__(self):
         
         config = Object()
-        config.just_one_server = False
+        config.just_one_server = True
         config.grad_update_cnt = 25
         config.serverType = NetworkType.World
         
+        print NetworkType.World,NetworkType.Task,NetworkType.Agent
         self.config = config
         self.buildNetworks()
         self.ZMQ_setup()
@@ -68,33 +70,47 @@ class ModDNN_ZMQ_Server:
                 raise Error("Ran out of types on the server")
 
     def build_NN_worlds(self):
+        print "building worlds"
         self.nnetworks[NetworkType.World] = {}
-        self.gradientCnts[NetworkType.World] = {}
         self.nnetworks[NetworkType.World][1] = networks.World1()
-        self.gradientCnts[NetworkType.World][1] = self.config.grad_update_cnt
         self.nnetworks[NetworkType.World][2] = networks.World2()
+        self.nnetworks[NetworkType.World][3] = networks.World3()
+
+        self.gradientCnts[NetworkType.World] = {}
+        self.gradientCnts[NetworkType.World][1] = self.config.grad_update_cnt
         self.gradientCnts[NetworkType.World][2] = self.config.grad_update_cnt
+        self.gradientCnts[NetworkType.World][3] = self.config.grad_update_cnt
+        
     def build_NN_tasks(self):
+        print "building tasks"
         self.nnetworks[NetworkType.Task] = {}
-        self.gradientCnts[NetworkType.Task] = {}
         self.nnetworks[NetworkType.Task][1] = networks.Task1()
-        self.gradientCnts[NetworkType.Task][1] = self.config.grad_update_cnt
         self.nnetworks[NetworkType.Task][2] = networks.Task2()
+        self.nnetworks[NetworkType.Task][3] = networks.Task3()
+
+        self.gradientCnts[NetworkType.Task] = {}
+        self.gradientCnts[NetworkType.Task][1] = self.config.grad_update_cnt
         self.gradientCnts[NetworkType.Task][2] = self.config.grad_update_cnt
+        self.gradientCnts[NetworkType.Task][3] = self.config.grad_update_cnt
+    
     def build_NN_agents(self):
+        print "building agents"
         self.nnetworks[NetworkType.Agent] = {}
+        self.nnetworks[NetworkType.Agent][1] = networks.Agent1()
+        self.nnetworks[NetworkType.Agent][2] = networks.Agent2()
+        self.nnetworks[NetworkType.Agent][3] = networks.Agent3()
+
         self.gradientCnts[NetworkType.Agent] = {}
-        self.nnetworks[NetworkType.Agent][1] = networks.Agents1()
         self.gradientCnts[NetworkType.Agent][1] = self.config.grad_update_cnt
-        self.nnetworks[NetworkType.Agent][2] = networks.Agents2()
         self.gradientCnts[NetworkType.Agent][2] = self.config.grad_update_cnt
+        self.gradientCnts[NetworkType.Agent][3] = self.config.grad_update_cnt
         
     
     def handle_weight_request(self, receiving_socket):
-        print " responing to weight request"
         # Receive the request
         msg = receiving_socket.recv()
         msg_type, network_type, network_id = Ops.decompress_request(msg)
+        print " responing to weight request {} {}".format(network_type, network_id)
         
         # Error check
         if not msg_type == Messages.RequestingNetworkWeights:
@@ -152,23 +168,40 @@ class ModDNN_ZMQ_Server:
     
     def publish_weights_available(self, network_type, network_id):
         # Error check
-        if not isinstance(network_type, NetworkType):
-            raise TypeError("network_type must be set to enum value of NetworkType")
-        if (network_type_id < 0):
-            raise ValueError("network_type_id must be non-negative")
+        # if not isinstance(network_type, NetworkType):
+        #     raise TypeError("network_type must be set to enum value of NetworkType")
+        if (network_id < 0):
+            raise ValueError("network_id must be non-negative")
 
         # Publish a message saying the weights are available! 
-        self.message_bcast(Ops.compress_msg(Messages.NetworkWeightsReady, network_type, network_id))
+        self.message_bcast.send(Ops.compress_msg(Messages.NetworkWeightsReady, network_type, network_id))
     
+    def testClient(self):
+        self.stop = False
+        while not self.stop:
+            # check for new request or gradients
+            socks = dict( self.poller.poll( 500 ) )
+            if self.param_rr in socks:
+                print "handling network weight request"
+                self.handle_weight_request(self.param_rr)
+            if self.grad_recv in socks:
+                self.handle_incoming_gradients(self.grad_recv)
+
+            # Send out fake messages
+            a = np.random.randint(1,4)
+            b = np.random.randint(1,3)
+            print "pushing {}, {}".format(a,b)
+            self.publish_weights_available(a, b)
+
+
     def startPolling(self):
         self.stop = False
         while not self.stop:
             # check for new request or gradients
-            socks = dict( self.poller.poll( 1000 ) )
-            print "SERVER_REAL POLLER:", socks
-            
+            socks = dict( self.poller.poll( 0 ) )
             if self.param_rr in socks:
                 self.handle_weight_request(self.param_rr)
-                
             if self.grad_recv in socks:
                 self.handle_incoming_gradients(self.grad_recv)
+            
+            # Maybe save the weights to disk periodically?

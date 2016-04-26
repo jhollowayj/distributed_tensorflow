@@ -97,3 +97,62 @@ class Agent1(Shared_Model_Object):
         
         self.model = Sequential()
         self.model.add(out1_softplus)
+
+
+#################################################################
+#             vvvvvvvvvvv Junk these vvvvvvvvvvv
+#################################################################
+class World3(Shared_Model_Object):
+    def __init__(self):
+        Shared_Model_Object.__init__(self)
+
+        out1_softplus = Dense(output_dim=10, input_dim=32, init="glorot_uniform", activation="softplus")
+        
+        self.model = Sequential()
+        self.model.add(out1_softplus)
+
+class Agent2(Shared_Model_Object):
+    def __init__(self):
+        Shared_Model_Object.__init__(self)
+
+        out1_softplus = Dense(output_dim=10, input_dim=32, init="glorot_uniform", activation="softplus")
+        
+        self.model = Sequential()
+        self.model.add(out1_softplus)
+class Agent3(Shared_Model_Object):
+    def __init__(self):
+        Shared_Model_Object.__init__(self)
+
+        out1_softplus = Dense(output_dim=10, input_dim=32, init="glorot_uniform", activation="softplus")
+        
+        self.model = Sequential()
+        self.model.add(out1_softplus)
+        
+class Task1(Shared_Model_Object):
+    def __init__(self):
+        Shared_Model_Object.__init__(self)
+
+        out1_softplus = Dense(output_dim=10, input_dim=32, init="glorot_uniform", activation="softplus")
+        
+        self.model = Sequential()
+        self.model.add(out1_softplus)
+
+class Task2(Shared_Model_Object):
+    def __init__(self):
+        Shared_Model_Object.__init__(self)
+
+        out1_softplus = Dense(output_dim=10, input_dim=32, init="glorot_uniform", activation="softplus")
+        
+        self.model = Sequential()
+        self.model.add(out1_softplus)
+class Task3(Shared_Model_Object):
+    def __init__(self):
+        Shared_Model_Object.__init__(self)
+
+        out1_softplus = Dense(output_dim=10, input_dim=32, init="glorot_uniform", activation="softplus")
+        
+        self.model = Sequential()
+        self.model.add(out1_softplus)
+
+
+

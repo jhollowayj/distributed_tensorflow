@@ -3,9 +3,9 @@ class Object(object):
 
 def getConfig():
     config = Object()
-    config.serverHostName = "infinity"
-    config.WorldServerHostName = "infinity"
-    config.TaskServerHostName = "infinity"
-    config.AgentServerHostName = "infinity"        
+    config.serverHostName = "localhost"
+    config.WorldServerHostName = "localhost"
+    config.TaskServerHostName = "localhost"
+    config.AgentServerHostName = "localhost"        
     config.just_one_server = True
     return config

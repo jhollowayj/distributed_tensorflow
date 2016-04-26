@@ -8,25 +8,31 @@ class Object(object):
     pass
     
 class ModDNN_ZMQ_Client:
-    def __init__(self):
+    def __init__(self, world_id = 1, task_id = 1, agent_id = 1):
         config = zmqconfig.getConfig()
         self.ZMQ_setup(config) 
+        self.world_id = 1
+        self.task_id = 1
+        self.agent_id = 1
         
     def ZMQ_setup(self, config):
         self.context = zmq.Context()
         self.poller = zmq.Poller()
         self.servers = {}
         if config.just_one_server:
+            print "Adding just one server", config.serverHostName
             server = self.buildServerConnections(config.serverHostName)
             self.servers[NetworkType.World] = server
             self.servers[NetworkType.Task]  = server
             self.servers[NetworkType.Agent] = server
             self.poller.register(server.message_recv, zmq.POLLIN)
         else:
+            print "Adding several server"
             self.servers[NetworkType.World] = self.buildServerConnections(config.WorldServerHostName)
             self.servers[NetworkType.Task]  = self.buildServerConnections(config.TaskServerHostName)
             self.servers[NetworkType.Agent] = self.buildServerConnections(config.AgentServerHostName)
             for server in self.servers:
+                print "(Note: adding multiple server.msg_recv to poller)"
                 self.poller.register(server.message_recv, zmq.POLLIN)
         
             
@@ -81,6 +87,7 @@ class ModDNN_ZMQ_Client:
             network_type must be of type NetworkType enum defined in networks.py
             network_type_id isn't checked, but must be non-negative
         '''
+        print "requesting network weights"
         # Error Check
         # if not isinstance(network_type, NetworkType):
         #     raise TypeError("network_type must be set to enum value of NetworkType")
@@ -99,33 +106,36 @@ class ModDNN_ZMQ_Client:
         response_string = server.param_rr.recv()
         return Ops.decompress_weights(response_string)
 
+    def handle_message(self, socket):
+        msg_type, network_type, network_id = Ops.decompress_msg(socket.recv())
+        if (network_type == NetworkType.World and network_id == self.world_id) or\
+           (network_type == NetworkType.Task and network_id == self.task_id) or\
+           (network_type == NetworkType.Agent and network_id == self.world_id):
+            self.callback_weights_available(network_type, network_id)
+        
+        
+
     def setWeightsAvailableCallback(self, cb):
         ''' Set function to call for when ZMQ gets a message of available weights
             Simulators should use this to know they can request updated weights (i.e. requestNetworkWeights)
             
-            Callback api should be (msg, network, id).
+            Callback api should be (network, id).
             i.e. (Messages.NetworkWeightsReady, NetworkType.World, 1)
         '''
         self.callback_weights_available = cb
         
     def testServer(self):
-        arrs = []
-        ### Request Weights
-        for i in range(10):
-            print "requesting network weights, iteration {}".format(i + 1)
-            arr = self.requestNetworkWeights()
-            arrs.append(arr)  
-        ### Send in gradients!
-        for a in arrs:
-            self.sendGradients(a)
+        self.startPolling() # I think that's it...
         
     def startPolling(self):
         self.stop = False
         while not self.stop:
             # check for new network weights
-            socks = dict( self.poller.poll( 1000 ) ) # poll param == sleep time between polls
-            print "CLIENT_REAL POLLER:", socks
+            socks = dict( self.poller.poll( 0 ) ) # poll param == sleep time between polls
             
-            # TODO write the polling code
-            self.servers[NetworkType.World]
+            for server in self.servers.values():
+                if server.message_recv in socks:
+                    self.handle_message(server.message_recv)
             
+            # I think the training will happen outside this file,
+            # So I think this is all we need here.

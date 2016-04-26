@@ -1,16 +1,22 @@
 import zmq
 
 from networks import NetworkType, Messages
+import networks
 import zmqconfig
 import Ops
+import numpy as np
 
 # TODO add verbose flags for logging everything
-
+class Object(object):
+    pass
+    
 class ModDNN_ZMQ_Server:
-    def init(self):
-        config = {}
+    def __init__(self):
+        
+        config = Object()
         config.just_one_server = False
         config.grad_update_cnt = 25
+        config.serverType = NetworkType.World
         
         self.config = config
         self.buildNetworks()
@@ -36,16 +42,16 @@ class ModDNN_ZMQ_Server:
         self.poller = zmq.Poller()
         self.poller.register( self.param_rr, zmq.POLLIN )
         self.poller.register( self.grad_recv, zmq.POLLIN )
-    
+
     def buildNetworks(self):
         self.nnetworks = {}
         self.gradientCnts = {}
-        self.nnetworks[NetworkTypes.worlds] = None
-        self.nnetworks[NetworkTypes.tasks]  = None
-        self.nnetworks[NetworkTypes.agents] = None
-        self.gradientCnts[NetworkTypes.worlds] = None
-        self.gradientCnts[NetworkTypes.tasks]  = None
-        self.gradientCnts[NetworkTypes.agents] = None
+        self.nnetworks[NetworkType.World] = None
+        self.nnetworks[NetworkType.Task]  = None
+        self.nnetworks[NetworkType.Agent] = None
+        self.gradientCnts[NetworkType.World] = None
+        self.gradientCnts[NetworkType.Task]  = None
+        self.gradientCnts[NetworkType.Agent] = None
         
         if self.config.just_one_server:
             self.build_NN_worlds()
@@ -62,29 +68,33 @@ class ModDNN_ZMQ_Server:
                 raise Error("Ran out of types on the server")
 
     def build_NN_worlds(self):
-        self.nnetworks.worlds = {}
-        self.nnetworks.worlds[1] = networks.World1()
-        self.gradientCnts[NetworkTypes.worlds][1] = self.config.grad_update_cnt
-        self.nnetworks.worlds[2] = networks.World2()
-        self.gradientCnts[NetworkTypes.worlds][2] = self.config.grad_update_cnt
+        self.nnetworks[NetworkType.World] = {}
+        self.gradientCnts[NetworkType.World] = {}
+        self.nnetworks[NetworkType.World][1] = networks.World1()
+        self.gradientCnts[NetworkType.World][1] = self.config.grad_update_cnt
+        self.nnetworks[NetworkType.World][2] = networks.World2()
+        self.gradientCnts[NetworkType.World][2] = self.config.grad_update_cnt
     def build_NN_tasks(self):
-        self.nnetworks.tasks = {}
-        self.nnetworks.tasks[1] = networks.Task1()
-        self.gradientCnts[NetworkTypes.tasks][1] = self.config.grad_update_cnt
-        self.nnetworks.tasks[2] = networks.Task2()
-        self.gradientCnts[NetworkTypes.tasks][2] = self.config.grad_update_cnt
+        self.nnetworks[NetworkType.Task] = {}
+        self.gradientCnts[NetworkType.Task] = {}
+        self.nnetworks[NetworkType.Task][1] = networks.Task1()
+        self.gradientCnts[NetworkType.Task][1] = self.config.grad_update_cnt
+        self.nnetworks[NetworkType.Task][2] = networks.Task2()
+        self.gradientCnts[NetworkType.Task][2] = self.config.grad_update_cnt
     def build_NN_agents(self):
-        self.nnetworks.agents = {}
-        self.nnetworks.agents[1] = networks.Agents1()
-        self.gradientCnts[NetworkTypes.agents][1] = self.config.grad_update_cnt
-        self.nnetworks.agents[2] = networks.Agents2()
-        self.gradientCnts[NetworkTypes.agents][2] = self.config.grad_update_cnt
+        self.nnetworks[NetworkType.Agent] = {}
+        self.gradientCnts[NetworkType.Agent] = {}
+        self.nnetworks[NetworkType.Agent][1] = networks.Agents1()
+        self.gradientCnts[NetworkType.Agent][1] = self.config.grad_update_cnt
+        self.nnetworks[NetworkType.Agent][2] = networks.Agents2()
+        self.gradientCnts[NetworkType.Agent][2] = self.config.grad_update_cnt
         
     
     def handle_weight_request(self, receiving_socket):
+        print " responing to weight request"
         # Receive the request
         msg = receiving_socket.recv()
-        msg_type, network_type, network_id = Ops.decompress_request()
+        msg_type, network_type, network_id = Ops.decompress_request(msg)
         
         # Error check
         if not msg_type == Messages.RequestingNetworkWeights:
@@ -97,18 +107,22 @@ class ModDNN_ZMQ_Server:
         # # here, but you know how it goes...)
         
         # Send the requested weights
+        weights = self.nnetworks[network_type][network_id].get_model_weights()
+        # for w in weights:
+        #     print w.shape
+        # print weights
         receiving_socket.send(
-            Ops.compress_weights(
-                self.nnetworks[network_type][network_id] ) )
+            Ops.compress_weights( weights ) )
     
     def handle_incoming_gradients(self, receiving_socket):
+        print " recieving incoming gradients!" 
         # Receive the request
-        network_type, network_id, compressed_gradients =
+        network_type, network_id, compressed_gradients = \
             Ops.delabel_compressed_weights(
                 receiving_socket.recv())
 
         gradients = Ops.decompress_weights(compressed_gradients)
-        cur_weights = self.nnetworks[network_type][network_id].get_weights()
+        cur_weights = self.nnetworks[network_type][network_id].get_model_weights()
         
         # Error Check
         if len(gradients) != len(cur_weights):
@@ -125,7 +139,7 @@ class ModDNN_ZMQ_Server:
             new_weights.append(gradients[i] + cur_weights[i])
         
         # Apply these weights to the network now!
-        self.nnetworks[network_type][network_id].set_weights(new_weights)
+        self.nnetworks[network_type][network_id].set_model_weights(new_weights)
         
         # Update count, publish if needed.
         self.gradientCnts[network_type][network_id] -= 1
@@ -147,6 +161,14 @@ class ModDNN_ZMQ_Server:
         self.message_bcast(Ops.compress_msg(Messages.NetworkWeightsReady, network_type, network_id))
     
     def startPolling(self):
-        socks = dict( poller.poll( 0 ) )
-        print "SERVER_REAL POLLER:", socks
-        # TODO write the polling code
+        self.stop = False
+        while not self.stop:
+            # check for new request or gradients
+            socks = dict( self.poller.poll( 1000 ) )
+            print "SERVER_REAL POLLER:", socks
+            
+            if self.param_rr in socks:
+                self.handle_weight_request(self.param_rr)
+                
+            if self.grad_recv in socks:
+                self.handle_incoming_gradients(self.grad_recv)

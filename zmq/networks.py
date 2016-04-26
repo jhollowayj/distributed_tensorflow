@@ -57,20 +57,12 @@ class Shared_Model_Object:
     def get_model_weights(self):
         return self.model.get_weights()
         
+    def set_model_weights(self, weights):
+        self.model.set_weights(weights)
+
     def get_json_model(self):
         return self.model.to_json()
         
-    def update_weights(self, weights):
-        self.model.set_weights(weights)
-        
-    def update_pic_weights(self, picWeights):
-        weights = pickle.loads(picWeights)
-        self.model.set_weights(weights)
-        
-    def get_pic_weights(self):
-        weights = self.model.get_weights()
-        return pickle.dumps(weights)
-
 #####################################################################################################
 class World1(Shared_Model_Object):
     def __init__(self):

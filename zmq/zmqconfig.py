@@ -1,5 +1,8 @@
+class Object(object):
+    pass
+
 def getConfig():
-    config = {}
+    config = Object()
     config.serverHostName = "infinity"
     config.WorldServerHostName = "infinity"
     config.TaskServerHostName = "infinity"

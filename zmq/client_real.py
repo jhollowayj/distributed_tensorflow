@@ -4,16 +4,18 @@ from networks import NetworkType, Messages
 import zmqconfig
 import Ops
 
-
-
+class Object(object):
+    pass
+    
 class ModDNN_ZMQ_Client:
-    def init(self):
-        config = config.getConfig()
+    def __init__(self):
+        config = zmqconfig.getConfig()
         self.ZMQ_setup(config) 
         
     def ZMQ_setup(self, config):
         self.context = zmq.Context()
         self.poller = zmq.Poller()
+        self.servers = {}
         if config.just_one_server:
             server = self.buildServerConnections(config.serverHostName)
             self.servers[NetworkType.World] = server
@@ -29,7 +31,7 @@ class ModDNN_ZMQ_Client:
         
             
     def buildServerConnections(self, param_server):
-        server = {}
+        server = Object()
         # Broadcast general messages on this socket
         # ** Used to be notified of new weights availbable.**
         server.message_recv = self.context.socket(zmq.SUB)
@@ -53,22 +55,26 @@ class ModDNN_ZMQ_Client:
             network_type_id isn't checked, but must be non-negative
         '''
         # Error check
-        if not isinstance(network_type, NetworkType):
-            raise TypeError("network_type must be set to enum value of NetworkType")
+        # if not isinstance(network_type, NetworkType):
+        #     raise TypeError("network_type must be set to enum value of NetworkType")
         if (network_type_id < 0):
             raise ValueError("network_type_id must be non-negative")
             
         # Compress the weights
         compressedWeights = None
-        if isinstance(gradients, list):
-            compressedWeights = Ops.compress_weights(weights) # Custom Picling!
+        if isinstance(gradients, list): # TODO is there a better check we can run besides list?
+            compressedWeights = Ops.compress_weights(gradients) # Custom Picling
         else:
             compressedWeights = gradients
+
+        # Get the specific server
+        server = self.servers[network_type]
             
         # Send the compressed weights
-        self.grad_send.send(
-            Ops.label_compressed_weights(
-                network_type, network_type_id, compressedWeights))
+        msg = Ops.label_compressed_weights(
+                network_type, network_type_id, compressedWeights)
+        server.grad_send.send(msg)
+        
         
     def requestNetworkWeights(self, network_type = NetworkType.World, network_type_id = 1):
         ''' Request network Weights
@@ -76,18 +82,21 @@ class ModDNN_ZMQ_Client:
             network_type_id isn't checked, but must be non-negative
         '''
         # Error Check
-        if not isinstance(network_type, NetworkType):
-            raise TypeError("network_type must be set to enum value of NetworkType")
+        # if not isinstance(network_type, NetworkType):
+        #     raise TypeError("network_type must be set to enum value of NetworkType")
         if (network_type_id < 0):
             raise ValueError("network_type_id must be non-negative")
             
+        # Get the specific server
+        server = self.servers[network_type]
+            
         # Send request
-        self.param_rr.send(
-            Ops.compress_request(
-                Messages.RequestingNetworkWeights, network_type, network_type_id))
+        msg = Ops.compress_request(
+                Messages.RequestingNetworkWeights, network_type, network_type_id)
+        server.param_rr.send(msg)
 
         # Receive Response
-        response_string = self.param_rr.recv()
+        response_string = server.param_rr.recv()
         return Ops.decompress_weights(response_string)
 
     def setWeightsAvailableCallback(self, cb):
@@ -99,9 +108,24 @@ class ModDNN_ZMQ_Client:
         '''
         self.callback_weights_available = cb
         
+    def testServer(self):
+        arrs = []
+        ### Request Weights
+        for i in range(10):
+            print "requesting network weights, iteration {}".format(i + 1)
+            arr = self.requestNetworkWeights()
+            arrs.append(arr)  
+        ### Send in gradients!
+        for a in arrs:
+            self.sendGradients(a)
         
     def startPolling(self):
-        # check for new parameters
-        socks = dict( poller.poll( 0 ) )
-        print "CLIENT_REAL POLLER:", socks
-        # TODO write the polling code
+        self.stop = False
+        while not self.stop:
+            # check for new network weights
+            socks = dict( self.poller.poll( 1000 ) ) # poll param == sleep time between polls
+            print "CLIENT_REAL POLLER:", socks
+            
+            # TODO write the polling code
+            self.servers[NetworkType.World]
+            

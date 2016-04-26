@@ -2,8 +2,10 @@ import zmq
 import time
 import threading
 import networks
-import numpy as np
+import Ops
 import json
+import numpy as np
+import sys
 
 class zmq_client():
     def __init__(self):
@@ -18,7 +20,8 @@ class zmq_client():
 
     def build_client_server_stuff(self):
         self.context = zmq.Context()
-        self.param_server = "localhost"
+        self.param_server = "infinity"
+        self.param_server = "santaka"
         self.computerName = "testclient1"
         
         # Broadcast general messages on this socket
@@ -44,39 +47,41 @@ class zmq_client():
     
     
     def test(self):
-        self.param_rr.send( json.dumps(['world', 1]) )
-        weights = []
-        res = self.param_rr.recv()
-        ws = res.split("$$SPLIT$$")
-        for w in ws:
-            weights.append(np.fromstring(w))
-        print len(weights)
-        
-        
-        self.param_rr.send( json.dumps(['world', 2]) )
-        weights = []
-        res = self.param_rr.recv()
-        ws = res.split("$$SPLIT$$")
-        for w in ws:
-            weights.append(np.fromstring(w))
-        print len(weights)
-        
-        
-        self.param_rr.send( json.dumps(['agent', 1]) )
-        weights = []
-        res = self.param_rr.recv()
-        ws = res.split("$$SPLIT$$")
-        for w in ws:
-            weights.append(np.fromstring(w))
-        print len(weights)
+        self.benchmark_network()  
     
+    def benchmark_network(self):
+        lasttime = time.time()
+        msglen = 1.0
+        time.sleep(1)
+        while True:
+            deltatime = time.time() - lasttime
+            print "time: {}s,  bytes/s: {} ({} GBits)".format(deltatime, msglen / deltatime, 8 * msglen / deltatime / 1073741824.0)
+            lasttime = time.time()
+            print "Waiting on broadcast"
+            msg = self.param_recv.recv()
+            print "Broadcast recieved!, unpacking"
+            arr = np.fromstring(msg)
+            print "unpacking done"
+            msglen = float(sys.getsizeof(msg))
+            print msglen / 1073741824.0, "GBytes, id:", arr[0]
+
+    def working(self):
+        w1 = self.request_initial_weights_from_server(network_type="world", network_type_id=1)
+        t1 = self.request_initial_weights_from_server(network_type="world", network_type_id=2)
+        a1 = self.request_initial_weights_from_server(network_type="agent", network_type_id=1)
     
-    
+        self.publish_deltas("world", 1, w1)
+        self.publish_deltas("world", 2, t1)
+        self.publish_deltas("agent", 1, a1)
     
     # ===============================================================
-    def publish_deltas(self, deltas_to_publish):
-        print "Publishing Deltas is not yet implemented"
-        self.grad_send.send("Sending world 1 params from me")
+    def request_initial_weights_from_server(self, network_type="world", network_type_id=1):
+        self.param_rr.send(json.dumps(["request_weights", network_type, network_type_id]))
+        response_string = self.param_rr.recv()
+        return Ops.decompress_weights(response_string)
+        
+    def publish_deltas(self, network_type="world", network_type_id=1, deltas_to_publish=None):
+        self.grad_send.send("Sending {} {} params from me, weights = {}".format(network_type, network_type_id, len(deltas_to_publish)))
         
         
     def run_network_and_publish_deltas(self):

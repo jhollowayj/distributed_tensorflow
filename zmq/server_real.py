@@ -1,0 +1,152 @@
+import zmq
+
+from networks import NetworkType, Messages
+import zmqconfig
+import Ops
+
+# TODO add verbose flags for logging everything
+
+class ModDNN_ZMQ_Server:
+    def init(self):
+        config = {}
+        config.just_one_server = False
+        config.grad_update_cnt = 25
+        
+        self.config = config
+        self.buildNetworks()
+        self.ZMQ_setup()
+       
+    def ZMQ_setup(self):
+        self.context = zmq.Context()
+        self.poller = zmq.Poller()
+        
+        # Broadcast general messages on this socket
+        self.message_bcast = self.context.socket( zmq.PUB )
+        self.message_bcast.bind( "tcp://*:5555" )
+
+        # this is a point-to-point socket we'll use to send parameter
+        # updates when a new client starts up
+        self.param_rr = self.context.socket( zmq.REP )
+        self.param_rr.bind( "tcp://*:5556" )
+
+        # this is the socket we use to receive gradient updates from clients
+        self.grad_recv = self.context.socket( zmq.PULL )
+        self.grad_recv.bind( "tcp://*:5557" )
+
+        self.poller = zmq.Poller()
+        self.poller.register( self.param_rr, zmq.POLLIN )
+        self.poller.register( self.grad_recv, zmq.POLLIN )
+    
+    def buildNetworks(self):
+        self.nnetworks = {}
+        self.gradientCnts = {}
+        self.nnetworks[NetworkTypes.worlds] = None
+        self.nnetworks[NetworkTypes.tasks]  = None
+        self.nnetworks[NetworkTypes.agents] = None
+        self.gradientCnts[NetworkTypes.worlds] = None
+        self.gradientCnts[NetworkTypes.tasks]  = None
+        self.gradientCnts[NetworkTypes.agents] = None
+        
+        if self.config.just_one_server:
+            self.build_NN_worlds()
+            self.build_NN_tasks()
+            self.build_NN_agents()
+        else:
+            if self.config.serverType == NetworkType.World:
+                self.build_NN_worlds()
+            elif self.config.serverType == NetworkType.Task:
+                self.build_NN_tasks()
+            elif self.config.serverType == NetworkType.Agent:
+                self.build_NN_agents()
+            else:
+                raise Error("Ran out of types on the server")
+
+    def build_NN_worlds(self):
+        self.nnetworks.worlds = {}
+        self.nnetworks.worlds[1] = networks.World1()
+        self.gradientCnts[NetworkTypes.worlds][1] = self.config.grad_update_cnt
+        self.nnetworks.worlds[2] = networks.World2()
+        self.gradientCnts[NetworkTypes.worlds][2] = self.config.grad_update_cnt
+    def build_NN_tasks(self):
+        self.nnetworks.tasks = {}
+        self.nnetworks.tasks[1] = networks.Task1()
+        self.gradientCnts[NetworkTypes.tasks][1] = self.config.grad_update_cnt
+        self.nnetworks.tasks[2] = networks.Task2()
+        self.gradientCnts[NetworkTypes.tasks][2] = self.config.grad_update_cnt
+    def build_NN_agents(self):
+        self.nnetworks.agents = {}
+        self.nnetworks.agents[1] = networks.Agents1()
+        self.gradientCnts[NetworkTypes.agents][1] = self.config.grad_update_cnt
+        self.nnetworks.agents[2] = networks.Agents2()
+        self.gradientCnts[NetworkTypes.agents][2] = self.config.grad_update_cnt
+        
+    
+    def handle_weight_request(self, receiving_socket):
+        # Receive the request
+        msg = receiving_socket.recv()
+        msg_type, network_type, network_id = Ops.decompress_request()
+        
+        # Error check
+        if not msg_type == Messages.RequestingNetworkWeights:
+            print "Error, recieved bad request, throwing it away"
+        # TODO check netowkr_type
+        # TODO check network id against network type
+        # TODO TODO TODO IF there are any errors, we must notify the
+        # # client and allow them to fail gracefully.  (Ideally, 
+        # # this shouldn't be a problem as we are all among friends
+        # # here, but you know how it goes...)
+        
+        # Send the requested weights
+        receiving_socket.send(
+            Ops.compress_weights(
+                self.nnetworks[network_type][network_id] ) )
+    
+    def handle_incoming_gradients(self, receiving_socket):
+        # Receive the request
+        network_type, network_id, compressed_gradients =
+            Ops.delabel_compressed_weights(
+                receiving_socket.recv())
+
+        gradients = Ops.decompress_weights(compressed_gradients)
+        cur_weights = self.nnetworks[network_type][network_id].get_weights()
+        
+        # Error Check
+        if len(gradients) != len(cur_weights):
+            print "Error, received bad gradients, perhaps they are misslabeled!  (throwing them away)"
+            return
+        for i in range(len(gradients)):
+            if len(gradients[i]) != len(cur_weights[i]):
+                print "Error, received bad gradients, perhaps they are misslabeled!  (throwing them away)"
+                return
+            
+        # Build updated weights
+        new_weights = []
+        for i in range(len(gradients)):
+            new_weights.append(gradients[i] + cur_weights[i])
+        
+        # Apply these weights to the network now!
+        self.nnetworks[network_type][network_id].set_weights(new_weights)
+        
+        # Update count, publish if needed.
+        self.gradientCnts[network_type][network_id] -= 1
+        if self.gradientCnts[network_type][network_id] == 0:
+            self.gradientCnts[network_type][network_id] = self.config.grad_update_cnt
+            self.publish_weights_available(network_type, network_id)
+            
+        # TODO Maybe send a response saying it went through, or it failed???
+    
+    
+    def publish_weights_available(self, network_type, network_id):
+        # Error check
+        if not isinstance(network_type, NetworkType):
+            raise TypeError("network_type must be set to enum value of NetworkType")
+        if (network_type_id < 0):
+            raise ValueError("network_type_id must be non-negative")
+
+        # Publish a message saying the weights are available! 
+        self.message_bcast(Ops.compress_msg(Messages.NetworkWeightsReady, network_type, network_id))
+    
+    def startPolling(self):
+        socks = dict( poller.poll( 0 ) )
+        print "SERVER_REAL POLLER:", socks
+        # TODO write the polling code

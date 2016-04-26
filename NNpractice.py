@@ -59,18 +59,12 @@ class pracNN:
             else: print "Sorry, that's not a valid model..."
             
             
-            
-            
-
-class world1:
+#####################################################################################################
+#####################################################################################################
+class shared_model_object:
     def __init__(self):
-        dense1 = Dense(output_dim=64, input_dim=784, init="glorot_uniform", activation="relu")
-        dense2 = Dense(output_dim=32, input_dim=64, init="glorot_uniform", activation="relu")
-        
-        self.model = Sequential()
-        self.model.add(dense1)
-        self.model.add(dense2)
-        
+        self.model = None
+
     def getModel(self):
         return self.model
         
@@ -87,10 +81,19 @@ class world1:
     def getPicWeights(self):
         weights = self.model.get_weights()
         return pickle.dumps(weights)
-     
-#####################################################################################################
 
-class world2:
+#####################################################################################################
+class world1(shared_model_object):
+    def __init__(self):
+        dense1 = Dense(output_dim=64, input_dim=784, init="glorot_uniform", activation="relu")
+        dense2 = Dense(output_dim=32, input_dim=64, init="glorot_uniform", activation="relu")
+        
+        self.model = Sequential()
+        self.model.add(dense1)
+        self.model.add(dense2)     
+
+#####################################################################################################
+class world2(shared_model_object):
     def __init__(self):
         dense1 = Dense(output_dim=128, input_dim=784, init="glorot_uniform", activation="relu")
         dense2 = Dense(output_dim=64, input_dim=128, init="glorot_uniform", activation="relu")
@@ -100,47 +103,12 @@ class world2:
         self.model.add(dense1)
         self.model.add(dense2)
         self.model.add(dense3)
-        
-    def getModel(self):
-        return self.model
-        
-    def getJsonModel(self):
-        return self.model.to_json()
-        
-    def updateWeights(self, weights):
-        self.model.set_weights(weights)
-        
-    def updatePicWeights(self, picWeights):
-        weights = pickle.loads(picWeights)
-        self.model.set_weights(weights)
-        
-    def getPicWeights(self):
-        weights = self.model.get_weights()
-        return pickle.dumps(weights)
 
 #####################################################################################################
-     
-class agent1:
+class agent1(shared_model_object):
     def __init__(self):
         out1_softplus = Dense(output_dim=10, input_dim=32, init="glorot_uniform", activation="softplus")
         
         self.model = Sequential()
         self.model.add(out1_softplus)
-        
-    def getModel(self):
-        return self.model
-        
-    def getJsonModel(self):
-        return self.model.to_json()
-        
-    def updateWeights(self, weights):
-        self.model.set_weights(weights)
-        
-    def updatePicWeights(self, picWeights):
-        weights = pickle.loads(picWeights)
-        self.model.set_weights(weights)
-        
-    def getPicWeights(self):
-        weights = self.model.get_weights()
-        return pickle.dumps(weights)
 

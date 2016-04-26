@@ -4,9 +4,7 @@ Created on Mon Mar 21 10:50:15 2016
 
 @author: tetchart
 """
-
 from NNpractice import *
-
 
 
 # Import the MNIST data
@@ -66,16 +64,17 @@ a1 = agent1()
 model = Sequential()
 model.add(model_from_json(w1.getJsonModel()))
 model.add(model_from_json(a1.getJsonModel()))
-
 model.compile(loss='categorical_crossentropy', optimizer=SGD(lr=0.01, momentum=0.9, nesterov=True))
-model.fit(train_dataset, train_labels, nb_epoch=1, batch_size=100)
+
+model.fit(train_dataset, train_labels, nb_epoch=3, batch_size=400)
+
 
 weights = model.get_weights()
 w1W = weights[0:4]
 w1Pic = pickle.dumps(weights[0:4])
 a1Pic = pickle.dumps(weights[4:])
 
-w1UnPic = pickle.loads(w1Pic)
+# w1UnPic = pickle.loads(w1Pic)
 
 w1.updatePicWeights(w1Pic)
 a1.updatePicWeights(a1Pic)
@@ -86,7 +85,9 @@ model1 = Sequential()
 model1.add(model_from_json(w1.getJsonModel()))
 model1.add(model_from_json(a1.getJsonModel()))
 model1.compile(loss='categorical_crossentropy', optimizer=SGD(lr=0.01, momentum=0.9, nesterov=True))
-  
+
+print len(w1.getPicWeights())
+
 W1weights1 = pickle.loads(w1.getPicWeights())
 A1weights1 = pickle.loads(a1.getPicWeights())
 weights1 = W1weights1 + A1weights1
@@ -94,8 +95,9 @@ weights1 = W1weights1 + A1weights1
 weights2 = model1.get_weights()
 
 
-model1.set_weights(weights2)
-model1.fit(train_dataset, train_labels, nb_epoch=1, batch_size=32)
+print "Running second model"
+model1.set_weights(weights1)
+model1.fit(train_dataset, train_labels, nb_epoch=3, batch_size=400)
 
 
 

@@ -19,44 +19,16 @@ class Agent:
         self.experience = []
         self.i = 1
         self.save_freq = save_freq
-        self.build_functions()
+        self.build_model()
         self.iterations = 0
         self.anealing_size = anealing_size * 100.0 # Steps * percent
 
     def build_model(self):
-        v = "chris"
-        S = Input(shape=self.state_size)
-        h = Dense(1000, activation='relu')(S)
-        h = Dense(1000, activation='relu')(h)
-        h = Dense(1000, activation='relu')(h)
-        V = Dense(self.number_of_actions)(h)
-
-        self.model = Model(S, V)
-        try:
-            self.model.load_weights('{}.h5'.format(self.save_name))
-            print "loading from {}.h5".format(self.save_name)
-        except:
-            print "Training a new model"
-
-    def build_functions(self):
-        S = Input(shape=self.state_size)
-        NS = Input(shape=self.state_size)
-        A = Input(shape=(1,), dtype='int32')
-        R = Input(shape=(1,), dtype='float32')
-        T = Input(shape=(1,), dtype='int32')
-        self.build_model()
-        self.value_fn = K.function([S], self.model(S))
-
-        VS = self.model(S)
-        VNS = disconnected_grad(self.model(NS))
-        future_value = (1-T) * VNS.max(axis=1, keepdims=True)
-        discounted_future_value = self.discount * future_value
-        target = R + discounted_future_value
-        cost = ((VS[:, A] - target)**2).mean()
-        opt = RMSprop(0.0001)
-        params = self.model.trainable_weights
-        updates = opt.get_updates(params, [], cost)
-        self.train_fn = K.function([S, NS, A, R, T], cost, updates=updates)
+        self.model = DQN(
+            input_dims = self.state_size[0],
+            num_act = self.number_of_actions)
+        self.train_fn = self.model.train
+        self.value_fn = self.model.q
 
     def new_episode(self):
         self.episodes.append([])
@@ -73,12 +45,18 @@ class Agent:
         pass
 
     def calculate_epsilon(self):
-        iterationCnt = (self.iterations) % (self.anealing_size*4.5)
+        repeat_random_periodically = False
+        if repeat_random_periodically:
+            iterationCnt = (self.iterations) % (self.anealing_size*4.5)
+        else:
+            iterationCnt = self.iterations
         return max(self.epsilon, 1-(iterationCnt / self.anealing_size))
     def select_action(self, state, append=True):
         if append:
             self.episodes[-1].append(state)
-        values = self.value_fn([state[None, :]])
+        arr = []
+        arr.append(state)
+        values = self.value_fn(arr)
         
         # if numpy.random.random() < self.epsilon:
         if numpy.random.random() < self.calculate_epsilon():
@@ -95,20 +73,13 @@ class Agent:
 
     def iterate(self):
         N = len(self.episodes)
-        S = numpy.zeros((self.batch_size,) + self.state_size)
-        NS = numpy.zeros((self.batch_size,) + self.state_size)
-        A = numpy.zeros((self.batch_size, 1), dtype=numpy.int32)
-        R = numpy.zeros((self.batch_size, 1), dtype=numpy.float32)
-        T = numpy.zeros((self.batch_size, 1), dtype=numpy.int32)
+        S, NS, A, R, T = [], [], [], [], []  
         
         P = numpy.array([sum(episode)/len(episode) for episode in self.rewards]).astype(float)
         P *= numpy.abs(P) # Square it (keeping the sign)
         P -= numpy.min(P)
         P += 1 # still give the little guy a chance
         P /= numpy.sum(P)
-        # print "Probabili:", numpy.min(P), numpy.max(P), numpy.sum(P)
-        # print "P = ", P 
-        
             
         randomEpisode = True
         for i in xrange(self.batch_size):
@@ -121,16 +92,24 @@ class Agent:
             num_frames = len(self.episodes[episodeId])      # Choose a random state from that episode 
             frame = random.randint(0, num_frames-1)         #   (cont)
             
-            S[i] = self.episodes[episodeId][frame]          # Adds state to batch
-            T[i] = 1 if frame == num_frames - 1 else 0      # Is it the termial of that episode?
-            if frame < num_frames - 1:                      # (If there is a next state)
-                NS[i] = self.episodes[episodeId][frame+1]   #   Add next state
-            A[i] = self.actions[episodeId][frame]           # Add action
-            R[i] = self.rewards[episodeId][frame]           # Add reward
-        cost = self.train_fn([S, NS, A, R, T])              # TRAIN!!!!!!!
+            S.append(self.episodes[episodeId][frame])          # Adds state to batch
+            T.append(1 if frame == num_frames - 1 else 0)      # Is it the termial of that episode?
+            NS.append(self.episodes[episodeId][frame+1] if frame < num_frames - 1 else None)   #   Add next state
+            A.append(self.onehot(self.actions[episodeId][frame]))           # Add action
+            R.append(self.rewards[episodeId][frame])           # Add reward
+            
+            
+        S, NS, A, R, T = numpy.array(S), numpy.array(NS), numpy.array(A), numpy.array(R), numpy.array(T)
+        
         self.iterations += 1
+        cost = self.train_fn(S, A, T, NS, R)              # TRAIN!!!!!!!
         return cost
 
+    def onehot(self, action):
+        arr = [0] * self.number_of_actions
+        arr[action] = 1
+        return arr
+        
 
     def getRewardsPerSquare(self, indexer=0, maze=None):
         arr = numpy.zeros((12,12))

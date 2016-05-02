@@ -23,9 +23,10 @@ def agent3Mapping(): return [direction.s, direction.w, direction.n, direction.e]
         
 
 class JacobsMazeWorld(World):
-    def __init__(self, task_id = 2, action_mapping=agent3Mapping()):
+    def __init__(self, task_id = 2, action_mapping=agent3Mapping(), world_id=1):
         self.action_mapping = action_mapping
         self.task_id = task_id
+        self.world_id = world_id
 
         # Define start and end points
         self.startLocation = self.getStartPoint(self.task_id)
@@ -39,64 +40,27 @@ class JacobsMazeWorld(World):
         self.time = 0
         self.did_finish = False
         self.maze = self.buildMaze()
-        
-    def buildMaze(self):
-        w = maze_object.wall
-        o = maze_object.open
-        c = maze_object.coin
-        maze = np.array([               # What this one looks like
-            [w,w,w,w,w,w,w,w,w,w,w,w],  # 1 1 1 1 1 1 1 1 1 1 1 1 | 0
-            [w,c,c,c,w,c,c,c,w,c,w,w],  # 1     1             e 1 | 1
-            [w,c,w,c,c,c,w,c,c,c,w,w],  # 1   1   1 1 1 1 1 1   1 | 2
-            [w,c,c,c,w,c,c,c,w,c,c,w],  # 1   1   1   1         1 | 3
-            [w,c,w,c,c,c,w,c,c,c,w,w],  # 1   1   1   1   1 1   1 | 4
-            [w,c,c,c,w,c,c,c,w,c,c,w],  # 1   1   1   1   1     1 | 5
-            [w,c,w,c,c,c,w,c,c,c,w,w],  # 1   1   1       1     1 | 6
-            [w,c,c,c,w,c,c,c,w,c,c,w],  # 1   1   1       1     1 | 7
-            [w,c,w,c,c,c,w,c,c,c,w,w],  # 1   1   1   1 1 1 1   1 | 8
-            [w,c,c,c,w,c,c,c,w,c,c,w],  # 1   1 1 1   1         1 | 9
-            [w,c,w,c,c,c,w,c,c,c,w,w],  # 1 s 1   1       1     1 | 0
-            [w,w,w,w,w,w,w,w,w,w,w,w]   # 1 1 1 1 1 1 1 1 1 1 1 1 | 1
-        ])                              # ------------------------+
-                                        # 0 1 2 3 4 5 6 7 8 9 0 1
-        # maze = np.ones((12,12))
-        # maze[0:12,0:12] = maze_object.wall
-        # maze[1:11,1:11] = maze_object.coin
-        # print maze
-        maze[self.endLocation[0], self.endLocation[1]] = maze_object.exit
-        return maze
-    def mazeMask(self):
-        mask = np.array([
-            [1,1,1,1,1,1,1,1,1,1,1,1], 
-            [1,1,1,0,0,0,0,0,0,0,0,1], 
-            [1,1,1,0,1,1,1,1,1,1,1,1], 
-            [1,1,1,0,1,1,1,1,1,1,1,1], 
-            [1,1,1,0,1,1,1,1,1,1,1,1], 
-            [1,1,1,0,1,1,1,1,1,1,1,1], 
-            [1,1,1,0,1,1,1,1,1,1,1,1], 
-            [1,1,1,0,1,1,1,1,1,1,1,1], 
-            [1,0,0,0,1,1,1,1,1,1,1,1], 
-            [1,0,1,1,1,1,1,1,1,1,1,1], 
-            [1,0,1,1,1,1,1,1,1,1,1,1], 
-            [1,1,1,1,1,1,1,1,1,1,1,1]  
-        ])
-        mask -= 1
-        mask *= -1
-        return mask
 
+    def buildMaze(self):
+        return {
+            1: self.buildMaze_upRight,
+            2: self.buildMaze_staggered,
+            3: self.buildMaze_orgMaze
+        }[self.world_id]()
+        
     def heatmap_adder(self):
         arr = np.zeros(self.maze.shape)
         arr[self.agent_location[0], self.agent_location[1]] = 1
         return arr
     def getStartPoint(self, taskId):
         return {
-            1: ( 1,  1),
-            2: ( 6, 6),
+            1: (10,  1),
+            2: ( 6,  6),
             3: ( 1, 10)
         }[taskId]
     def getGoalPoint(self, taskId):
         return {
-            1: (10, 10),
+            1: ( 1, 10),
             2: ( 1,  1),
             3: ( 3, 3)
         }[taskId]
@@ -110,16 +74,18 @@ class JacobsMazeWorld(World):
 
     def render(self):
         mazecopy = np.array(self.maze)
-        mazecopy[self.agent_location[0], self.agent_location[1]] = maze_object.user
+        mazecopy[self.agent_location[0], self.agent_location[1]] = -1
         print mazecopy
         print "                              Score:{}  (+ {})".format(m.get_score(), score)
 
     def checkEnd(self, desiredCell):
-        # return self.endLocation == desiredCell
-        return desiredCell == (10, 10) or \
-               desiredCell == ( 1,  1) or \
-               desiredCell == (10,  1) or \
-               desiredCell == ( 1, 10)
+        return self.endLocation == desiredCell
+        
+        # return desiredCell == (10, 10) or \ # TESTING CODE FOR STAGGER WORLD
+        #        desiredCell == ( 1,  1) or \
+        #        desiredCell == (10,  1) or \
+        #        desiredCell == ( 1, 10)
+        
     def act(self, action):
         self.time += 1
         # print action
@@ -137,7 +103,7 @@ class JacobsMazeWorld(World):
         desiredCellType = self.maze[desiredCell[0], desiredCell[1]]
         
         # Calcualte Reward + Move
-        if desiredCellType == maze_object.wall:   # No?  Was it a wall?  I don't like walls...
+        if desiredCellType == maze_object.wall:   # Was it a wall?  I don't like walls...
             reward_for_movement -= 10
             # 1 # Do nothing
         elif self.checkEnd(desiredCell):         # Did I win?
@@ -146,8 +112,8 @@ class JacobsMazeWorld(World):
             self.did_finish = True
         elif desiredCellType == maze_object.coin:   # No?  Is there a coin?
             self.agent_location = desiredCell
-            reward_for_movement += 1
-            self.maze[desiredCell[0]][desiredCell[1]] = maze_object.open
+            # reward_for_movement += 1
+            # self.maze[desiredCell[0]][desiredCell[1]] = maze_object.open
         elif desiredCellType == maze_object.open:   # No?  Can I go there?
             self.agent_location = desiredCell
             # reward_for_movement += 1
@@ -166,14 +132,15 @@ class JacobsMazeWorld(World):
         
     def get_surrounding_square(self):
         arr = []
-        # arr.append(self.maze[self.agent_location[0]-1, self.agent_location[1]-1])
         arr.append(self.maze[self.agent_location[0]-1, self.agent_location[1]  ])
-        # arr.append(self.maze[self.agent_location[0]-1, self.agent_location[1]+1])
-        arr.append(self.maze[self.agent_location[0], self.agent_location[1]-1])
-        # arr.append(self.maze[self.agent_location[0], self.agent_location[1]  ])
-        arr.append(self.maze[self.agent_location[0], self.agent_location[1]+1])
-        # arr.append(self.maze[self.agent_location[0]+1, self.agent_location[1]-1])
         arr.append(self.maze[self.agent_location[0]+1, self.agent_location[1]  ])
+        arr.append(self.maze[self.agent_location[0], self.agent_location[1]-1])
+        arr.append(self.maze[self.agent_location[0], self.agent_location[1]+1])
+        ### Diagonals ###
+        # arr.append(self.maze[self.agent_location[0]-1, self.agent_location[1]-1])
+        # arr.append(self.maze[self.agent_location[0]-1, self.agent_location[1]+1])
+        # arr.append(self.maze[self.agent_location[0], self.agent_location[1]  ])
+        # arr.append(self.maze[self.agent_location[0]+1, self.agent_location[1]-1])
         # arr.append(self.maze[self.agent_location[0]+1, self.agent_location[1]+1])
         return arr
     
@@ -183,7 +150,7 @@ class JacobsMazeWorld(World):
             arr = []
             arr += self.agent_location
             arr += self.get_surrounding_square()
-            arr += self.calc_distance_to_goal()
+            # arr += self.calc_distance_to_goal()
             return arr
         else:
             return self.agent_location # For now, we just return the (x,y) position.
@@ -204,6 +171,61 @@ class JacobsMazeWorld(World):
         return # Do nothing for now
 
     #######################################################################
+    
+            
+    def buildMaze_staggered(self):
+        w, o, c = maze_object.wall, maze_object.open, maze_object.coin
+        return np.array([
+            [w,w,w,w,w,w,w,w,w,w,w,w], # [w w w w w w w w w w w w]
+            [w,c,c,c,w,c,c,c,w,c,w,w], # [w       w       w   w w]
+            [w,c,w,c,c,c,w,c,c,c,w,w], # [w   w       w       w w]
+            [w,c,c,c,w,c,c,c,w,c,c,w], # [w       w       w     w]
+            [w,c,w,c,c,c,w,c,c,c,w,w], # [w   w       w       w w]
+            [w,c,c,c,w,c,c,c,w,c,c,w], # [w       w       w     w]
+            [w,c,w,c,c,c,w,c,c,c,w,w], # [w   w       w       w w]
+            [w,c,c,c,w,c,c,c,w,c,c,w], # [w       w       w     w]
+            [w,c,w,c,c,c,w,c,c,c,w,w], # [w   w       w       w w]
+            [w,c,c,c,w,c,c,c,w,c,c,w], # [w       w       w     w]
+            [w,c,w,c,c,c,w,c,c,c,w,w], # [w   w       w       w w]
+            [w,w,w,w,w,w,w,w,w,w,w,w]  # [w w w w w w w w w w w w]
+        ])
+        
+    def buildMaze_upRight(self):
+        w, o, c = maze_object.wall, maze_object.open, maze_object.coin
+        return np.array([
+            [w,w,w,w,w,w,w,w,w,w,w,w],  # [w w w w w w w w w w w w]
+            [w,c,c,c,c,c,c,c,c,c,c,w],  # [w                     w]
+            [w,c,w,w,w,w,w,w,w,w,w,w],  # [w   w w w w w w w w w w]
+            [w,c,w,w,w,w,w,w,w,w,w,w],  # [w   w w w w w w w w w w]
+            [w,c,w,w,w,w,w,w,w,w,w,w],  # [w   w w w w w w w w w w]
+            [w,c,w,w,w,w,w,w,w,w,w,w],  # [w   w w w w w w w w w w]
+            [w,c,w,w,w,w,w,w,w,w,w,w],  # [w   w w w w w w w w w w]
+            [w,c,w,w,w,w,w,w,w,w,w,w],  # [w   w w w w w w w w w w]
+            [w,c,w,w,w,w,w,w,w,w,w,w],  # [w   w w w w w w w w w w]
+            [w,c,w,w,w,w,w,w,w,w,w,w],  # [w   w w w w w w w w w w]
+            [w,c,w,w,w,w,w,w,w,w,w,w],  # [w   w w w w w w w w w w]
+            [w,w,w,w,w,w,w,w,w,w,w,w]   # [w w w w w w w w w w w w]
+        ])
+        maze[self.endLocation[0], self.endLocation[1]] = maze_object.exit
+
+    def buildMaze_orgMaze(self):
+        w, o, c = maze_object.wall, maze_object.open, maze_object.coin
+        return np.array([
+            [w,w,w,w,w,w,w,w,w,w,w,w], # [w w w w w w w w w w w w],
+            [w,o,o,o,o,o,o,o,o,o,o,w], # [w                     w],
+            [w,o,w,w,w,w,w,w,w,w,o,w], # [w   w w w w w w w w   w],
+            [w,o,w,o,o,o,w,o,o,o,o,w], # [w   w       w         w],
+            [w,o,w,o,w,o,w,o,w,w,o,w], # [w   w   w   w   w w   w],
+            [w,o,w,o,w,o,w,o,w,o,o,w], # [w   w   w   w   w     w],
+            [w,o,w,o,w,o,o,o,w,o,w,w], # [w   w   w       w   w w],
+            [w,o,w,o,w,o,o,w,o,o,o,w], # [w   w   w     w       w],
+            [w,o,o,o,w,o,w,w,w,w,o,w], # [w       w   w w w w   w],
+            [w,o,w,w,w,o,w,o,o,o,o,w], # [w   w w w   w         w],
+            [w,o,w,o,o,o,o,o,w,o,o,w], # [w   w           w     w],
+            [w,w,w,w,w,w,w,w,w,w,w,w]  # [w w w w w w w w w w w w]
+        ])
+
+    #######################################################################
 debugging = False
 if debugging:    
     m = JacobsMazeWorld()
@@ -217,3 +239,5 @@ if debugging:
     for _ in range(9):
         score = m.act(1) # straight home to the morning light!
         m.render()
+    print m.get_state()
+    

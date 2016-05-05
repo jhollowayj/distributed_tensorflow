@@ -81,13 +81,13 @@ class ModDNN_ZMQ_Client:
                 network_type, network_type_id, compressedWeights)
         server.grad_send.send(msg)
         
-        
+    callback_weights_available = None
     def requestNetworkWeights(self, network_type = NetworkType.World, network_type_id = 1):
         ''' Request network Weights
             network_type must be of type NetworkType enum defined in networks.py
             network_type_id isn't checked, but must be non-negative
         '''
-        print "requesting network weights"
+        print "requesting network weights...",
         # Error Check
         # if not isinstance(network_type, NetworkType):
         #     raise TypeError("network_type must be set to enum value of NetworkType")
@@ -104,6 +104,7 @@ class ModDNN_ZMQ_Client:
 
         # Receive Response
         response_string = server.param_rr.recv()
+        print " network weights recieved!"
         return Ops.decompress_weights(response_string)
 
     def handle_message(self, socket):
@@ -111,7 +112,11 @@ class ModDNN_ZMQ_Client:
         if (network_type == NetworkType.World and network_id == self.world_id) or\
            (network_type == NetworkType.Task and network_id == self.task_id) or\
            (network_type == NetworkType.Agent and network_id == self.world_id):
-            self.callback_weights_available(network_type, network_id)
+            if self.callback_weights_available == None:
+                print "No callback set, Ignoring the update available"
+                return
+            else:
+                self.callback_weights_available(network_type, network_id)
         
         
 
@@ -127,15 +132,18 @@ class ModDNN_ZMQ_Client:
     def testServer(self):
         self.startPolling() # I think that's it...
         
+    def poll_once(self):
+        # check for new network weights
+        socks = dict( self.poller.poll( 0 ) ) # poll param == sleep time between polls
+        for server in self.servers.values():
+            if server.message_recv in socks:
+                self.handle_message(server.message_recv)
+        
+        # I think the training will happen outside this file,
+        # So I think this is all we need here.
+        
     def startPolling(self):
         self.stop = False
         while not self.stop:
-            # check for new network weights
-            socks = dict( self.poller.poll( 0 ) ) # poll param == sleep time between polls
+            self.poll_once()
             
-            for server in self.servers.values():
-                if server.message_recv in socks:
-                    self.handle_message(server.message_recv)
-            
-            # I think the training will happen outside this file,
-            # So I think this is all we need here.

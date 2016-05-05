@@ -13,10 +13,10 @@ class Messages(Enum):
     # Not sure if there were any other messages to pass, but I figured I'd put this here.
 
 params = {
-    'world_input_size': 8,
-    'world_to_task': 1000,
-    'task_to_agent': 1000,
-    'agent_1_action_space_size': 4,
+    'world_input_size': 6,
+    'world_to_task': 100,
+    'task_to_agent': 100,
+    'agent_1_action_space_size': 4
 }
 
 #####################################################################################################
@@ -37,10 +37,10 @@ def worldBuilder(worldId=1):
     else:
         raise InvalidModelRequest("World ID {} doesn't exist".format(worldId))
 def taskBuilder(taskID=1):
-   if taskID == 1:    return Task1()
+    if taskID == 1:    return Task1()
 #    elif taskID == 2:  return World2()
-#    else:
-    raise InvalidModelRequest("Task ID {} doesn't exist".format(taskID))
+    else:
+        raise InvalidModelRequest("Task ID {} doesn't exist".format(taskID))
 def agentBuilder(agentId=1):
     if agentId == 1:    return Agent1()
 #    elif agentId == 2:  return World2()
@@ -95,44 +95,42 @@ class World1(Shared_Model_Object):
         Input size is standard for worlds, output is standard for worlds
         Input size = 
     '''
-    def __init__(self):
+    def __init__(self, sess):
         Shared_Model_Object.__init__(self)
+        self.sess = sess
         # Layer 1
-        self.w1 = tf.Variable(tf.random_normal([params['world_input_size'], params['world_to_task']], stddev=0.01), name="W1_L1_w")
-        self.b1 = tf.Variable(tf.constant(0.1, shape=[params['world_to_task']]), name="W1_L1_b")
+        self.w1 = tf.Variable(tf.random_normal([params['world_input_size'], params['world_to_task']], stddev=0.01, dtype=tf.float32), name="W1_L1_w")
+        self.b1 = tf.Variable(tf.constant(0.1, shape=[params['world_to_task']], dtype=tf.float32), name="W1_L1_b")
         self.layers = [ self.w1, self.b1 ]
-        # Init
-        self.sess = tf.Session()
-        self.sess.run(tf.initialize_all_variables())
 
 #####################################################################################################
 class Task1(Shared_Model_Object):
-    def __init__(self):
+    def __init__(self, sess):
         Shared_Model_Object.__init__(self)
+        self.sess = sess
         # Layer 1
-        self.w1 = tf.Variable(tf.random_normal([params['world_to_task'], params['task_to_agent']], stddev=0.01), name="T1_L1_w")
-        self.b1 = tf.Variable(tf.constant(0.1, shape=[world_to_task]), name="T1_L1_b")
+        self.w1 = tf.Variable(tf.random_normal([params['world_to_task'], params['task_to_agent']], stddev=0.01, dtype=tf.float32), name="T1_L1_w")
+        self.b1 = tf.Variable(tf.constant(0.1, shape=[params['world_to_task']], dtype=tf.float32), name="T1_L1_b")
         self.layers = [ self.w1, self.b1 ]
-        # Init
-        self.sess = tf.Session()
-        self.sess.run(tf.initialize_all_variables())
 
 #####################################################################################################
 class Agent1(Shared_Model_Object):
-    def __init__(self):
+    def __init__(self, sess):
         Shared_Model_Object.__init__(self)
+        self.sess = sess
         # Layer 1
-        self.w1 = tf.Variable(tf.random_normal([params['task_to_agent'], params['agent_1_action_space_size']], stddev=0.01), name="A1_L1_w")
-        self.b1 = tf.Variable(tf.constant(0.1, shape=[params['agent_1_action_space_size']]), name="A1_L1_b")
+        self.w1 = tf.Variable(tf.random_normal([params['task_to_agent'], params['agent_1_action_space_size']], stddev=0.01, dtype=tf.float32), name="A1_L1_w")
+        self.b1 = tf.Variable(tf.constant(0.1, shape=[params['agent_1_action_space_size']], dtype=tf.float32), name="A1_L1_b")
         self.layers = [ self.w1, self.b1 ]
-        # Init
-        self.sess = tf.Session()
-        self.sess.run(tf.initialize_all_variables())
-
+#####################################################################################################
 
 debugging = False
 if debugging:
-    w = World1()
+    sess = tf.Session()
+    print sess
+    w = World1(sess)
+    sess.run(tf.initialize_all_variables())
+
     # print type(w.layers)
     # print len(w.layers)
     # print type(w.layers[0].eval(w.sess))
@@ -142,9 +140,12 @@ if debugging:
     
     ### Test 1: get and set weights works ###
     x = w.get_model_weights()
-    start = x[0][0] # Store the first guy
+    start = x[0][0][0] # Store the first guy
+    print x[0][0]
     w.set_model_weights([np.zeros(layer.shape) for layer in w.get_model_weights()])
+    print w.get_model_weights()[0][0]
     assert w.get_model_weights()[0][0][0] == 0
     w.add_gradients(x)
-    assert x == w.get_model_weights()[0][0][0]
+    assert start == w.get_model_weights()[0][0][0]
+    print w.get_model_weights()[0][0]
     ### Test 1: get and set weights works ###

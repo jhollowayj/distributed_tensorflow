@@ -1,6 +1,6 @@
-import server_real
+import server
 
-s = server_real.ModDNN_ZMQ_Server()
+s = server.ModDNN_ZMQ_Server()
 
 # s.testClient()
 s.startPolling()

@@ -14,9 +14,10 @@ def compress_weights(weights):
     '''
     weight_string = "" 
     for i, w in enumerate(weights):
-        weight_string += w.tostring()
+        weight_string += w.astype(np.float32).tostring()
         weight_string += "$$SPLIT$$"
-        weight_string += pickle.dumps(w.shape) 
+        weight_string += pickle.dumps(w.shape)
+        # print "=======arrayshape:{}".format(w.shape)
         if i < (len(weights) - 1):
             weight_string += "$$SPLIT$$"
     return weight_string
@@ -26,9 +27,9 @@ def decompress_weights(weight_string):
     weight_string = weight_string.split("$$SPLIT$$")
     weights = []
     for i in range(0, len(weight_string), 2):
-        arr = np.fromstring(weight_string[i], dtype=np.float32)
+        arr = np.fromstring(weight_string[i], np.float32)
         shape = pickle.loads(weight_string[i+1])
-        
+        # print "=======Org:{}, to new shape:{}".format(arr.shape, shape)
         weights.append(arr.reshape(shape))
     return weights
     
@@ -48,7 +49,6 @@ def label_compressed_weights(network_type, network_id, compressed_weights):
 
 def delabel_compressed_weights(msg):
     obj = pickle.loads(msg)
-    print type(obj)
     return (obj[0], obj[1], obj[2])
     
     

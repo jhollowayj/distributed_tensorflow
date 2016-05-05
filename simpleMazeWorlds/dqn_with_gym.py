@@ -3,7 +3,7 @@ import numpy
 from mrkulk_dqn import DQN
 
 class Agent:
-    def __init__(self, state_size=None, number_of_actions=1,
+    def __init__(self, state_size=None, number_of_actions=1, just_greedy=False,
                  epsilon=0.1, batch_size=32, discount=0.99, memory=50,
                  save_name='basic', save_freq=10, anealing_size=100):
         self.state_size = state_size
@@ -22,7 +22,8 @@ class Agent:
         self.build_model()
         self.iterations = 0
         self.anealing_size = anealing_size * 100.0 # Steps * percent
-
+        self.just_greedy = just_greedy
+        
     def build_model(self):
         self.model = DQN(
             input_dims = self.state_size[0],
@@ -45,12 +46,15 @@ class Agent:
         pass
 
     def calculate_epsilon(self):
-        repeat_random_periodically = False
-        if repeat_random_periodically:
-            iterationCnt = (self.iterations) % (self.anealing_size*4.5)
+        if self.just_greedy:
+            return self.epsilon
         else:
-            iterationCnt = self.iterations
-        return max(self.epsilon, 1-(iterationCnt / self.anealing_size))
+            repeat_random_periodically = False
+            if repeat_random_periodically:
+                iterationCnt = (self.iterations) % (self.anealing_size*4.5)
+            else:
+                iterationCnt = self.iterations
+            return max(self.epsilon, 1-(iterationCnt / self.anealing_size))
     def select_action(self, state, append=True):
         if append:
             self.episodes[-1].append(state)
@@ -103,6 +107,7 @@ class Agent:
         
         self.iterations += 1
         cost = self.train_fn(S, A, T, NS, R)              # TRAIN!!!!!!!
+        
         return cost
 
     def onehot(self, action):
@@ -110,7 +115,16 @@ class Agent:
         arr[action] = 1
         return arr
         
+    def set_weights(self, weights, network_type):
+        self.model.set_weights(weights, network_type)
 
+    def get_gradients(self):
+        grs = self.model.get_and_clear_gradients()
+        # Note this is not dynamic!  It's hard coded for 3 layers, each with 2 items (w, b) (I think it's right)
+        g1 = grs[0:2]
+        g2 = grs[2:4]
+        g3 = grs[4:6]
+        return [g1,g2,g3]
     def getRewardsPerSquare(self, indexer=0, maze=None):
         arr = numpy.zeros((12,12))
         for x in range(len(arr)):

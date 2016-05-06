@@ -1,28 +1,23 @@
-import zmq
-
+import zmq, time, numpy as np, tensorflow as tf
+import networks, Ops
 from networks import NetworkType, Messages
-import networks
-import zmqconfig
-import Ops
-import numpy as np
-import time
-import tensorflow as tf
 
-# TODO add verbose flags for logging everything
-class Object(object):
-    pass
-    
 class ModDNN_ZMQ_Server:
-    def __init__(self):
-        
-        config = Object()
-        config.just_one_server = True
-        config.grad_update_cnt = 10
-        config.serverType = NetworkType.World
-        config.server_learning_rate = 100
-        
-        print NetworkType.World,NetworkType.Task,NetworkType.Agent
-        self.config = config
+    def __init__(self, just_one_server=True, grad_update_cnt=2,
+                 serverType=NetworkType.World, server_learning_rate=1,
+                 tensorflow_random_seed=54321, requested_gpu_vram_percent =(1.0/12.0),
+                 device_to_use=1):
+        self.config = {
+            'just_one_server': just_one_server,
+            'grad_update_cnt': grad_update_cnt,
+            'serverType': serverType,
+            'server_learning_rate': server_learning_rate,
+            'tensorflow_random_seed': tensorflow_random_seed,
+            'requested_gpu_vram_percent': requested_gpu_vram_percent,
+            'device_to_use': device_to_use,
+        }
+        self.income_update_cnt = 0.0
+        self.output_update_cnt = 0.0
         self.buildNetworks()
         self.ZMQ_setup()
        
@@ -48,10 +43,11 @@ class ModDNN_ZMQ_Server:
         self.poller.register( self.grad_recv, zmq.POLLIN )
 
     def buildNetworks(self):
-        tf.set_random_seed(1234) # Keep a constant seed to prevent weird bugs of this working only some times.
+        # Keep a constant seed to prevent weird bugs of this working only some times.
+        tf.set_random_seed(self.config['tensorflow_random_seed']) 
         print "Tensorflow seed: {}".format(tf.get_seed(None))
         
-        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.01)
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=self.config['requested_gpu_vram_percent'])
         self.sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
         
         self.nnetworks = {}
@@ -63,23 +59,25 @@ class ModDNN_ZMQ_Server:
         self.gradientCnts[NetworkType.Task]  = None
         self.gradientCnts[NetworkType.Agent] = None
         
-        if self.config.just_one_server:
-            self.build_NN_worlds()
-            self.build_NN_tasks()
-            self.build_NN_agents()
-        else:
-            if self.config.serverType == NetworkType.World:
+        
+        with tf.device({-1: "/cpu:0", 0: "/gpu:0", 1: "/gpu:1"}[self.config['device_to_use']]):
+            if self.config['just_one_server']:
                 self.build_NN_worlds()
-            elif self.config.serverType == NetworkType.Task:
                 self.build_NN_tasks()
-            elif self.config.serverType == NetworkType.Agent:
                 self.build_NN_agents()
             else:
-                raise Error("Ran out of types on the server")
-        print "Initializing _all _variables on server"
-        # vars = tf.all_variables() # Some of these I don't know where they come from.
-        # for v in vars:
-        #     print v.name
+                if self.config['serverType'] == NetworkType.World:
+                    self.build_NN_worlds()
+                elif self.config['serverType'] == NetworkType.Task:
+                    self.build_NN_tasks()
+                elif self.config['serverType'] == NetworkType.Agent:
+                    self.build_NN_agents()
+                else:
+                    raise Error("Ran out of types on the server")
+            print "Initializing _all _variables on server"
+            # vars = tf.all_variables() # Some of these I don't know where they come from.
+            # for v in vars:
+            #     print v.name
         self.sess.run(tf.initialize_all_variables())
 
     def build_NN_worlds(self):
@@ -90,9 +88,9 @@ class ModDNN_ZMQ_Server:
         # self.nnetworks[NetworkType.World][3] = networks.World3(self.sess)
 
         self.gradientCnts[NetworkType.World] = {}
-        self.gradientCnts[NetworkType.World][1] = self.config.grad_update_cnt
-        # self.gradientCnts[NetworkType.World][2] = self.config.grad_update_cnt
-        # self.gradientCnts[NetworkType.World][3] = self.config.grad_update_cnt
+        self.gradientCnts[NetworkType.World][1] = self.config['grad_update_cnt']
+        # self.gradientCnts[NetworkType.World][2] = self.config['grad_update_cnt']
+        # self.gradientCnts[NetworkType.World][3] = self.config['grad_update_cnt']
         
     def build_NN_tasks(self):
         print "building tasks"
@@ -102,9 +100,9 @@ class ModDNN_ZMQ_Server:
         # self.nnetworks[NetworkType.Task][3] = networks.Task3(self.sess)
 
         self.gradientCnts[NetworkType.Task] = {}
-        self.gradientCnts[NetworkType.Task][1] = self.config.grad_update_cnt
-        # self.gradientCnts[NetworkType.Task][2] = self.config.grad_update_cnt
-        # self.gradientCnts[NetworkType.Task][3] = self.config.grad_update_cnt
+        self.gradientCnts[NetworkType.Task][1] = self.config['grad_update_cnt']
+        # self.gradientCnts[NetworkType.Task][2] = self.config['grad_update_cnt']
+        # self.gradientCnts[NetworkType.Task][3] = self.config['grad_update_cnt']
     
     def build_NN_agents(self):
         print "building agents"
@@ -114,9 +112,9 @@ class ModDNN_ZMQ_Server:
         # self.nnetworks[NetworkType.Agent][3] = networks.Agent3(self.sess)
 
         self.gradientCnts[NetworkType.Agent] = {}
-        self.gradientCnts[NetworkType.Agent][1] = self.config.grad_update_cnt
-        # self.gradientCnts[NetworkType.Agent][2] = self.config.grad_update_cnt
-        # self.gradientCnts[NetworkType.Agent][3] = self.config.grad_update_cnt
+        self.gradientCnts[NetworkType.Agent][1] = self.config['grad_update_cnt']
+        # self.gradientCnts[NetworkType.Agent][2] = self.config['grad_update_cnt']
+        # self.gradientCnts[NetworkType.Agent][3] = self.config['grad_update_cnt']
         
     
     def handle_weight_request(self, receiving_socket):
@@ -148,17 +146,21 @@ class ModDNN_ZMQ_Server:
             Ops.compress_weights( weights ) )
     
     def handle_incoming_gradients(self, receiving_socket):
-        print " recieving incoming gradients!" 
+        self.income_update_cnt += 1.0
+        print " recieving incoming gradients!  (# {})".format(int(self.income_update_cnt / 3.0))
         # Receive the request
         network_type, network_id, compressed_gradients = \
             Ops.delabel_compressed_weights(
                 receiving_socket.recv())
 
         gradients = Ops.decompress_weights(compressed_gradients)
+        plus = gradients[0][0][0]
         for g in gradients:
-            g *= self.config.server_learning_rate
-        # cur_weights = self.nnetworks[network_type][network_id].get_model_weights()
-        
+            g *= self.config['server_learning_rate']
+        cur_weights = self.nnetworks[network_type][network_id].get_model_weights()
+        start = cur_weights[0][0][0]
+        print "Recieved Gradient {} * {} = {}.  Adding to {}.".format(
+            plus, self.config['server_learning_rate'], plus * self.config['server_learning_rate'], start),
         ### ### ### MOVED TO INSIDE THE NETWORK CLASS ### ### ###
         # Error Check 
         # if len(gradients) != len(cur_weights):
@@ -183,6 +185,7 @@ class ModDNN_ZMQ_Server:
         ##    print "======WEIGHT   1,1[0][0][0]: ", self.nnetworks[1][1].get_model_weights()[0][0][0]
         ##    print "=== + GRADIENT 1,1[0][0][0]: ", gradients[0][0][0]
         self.nnetworks[network_type][network_id].add_gradients(gradients)
+        print "  Now it's {}".format(self.nnetworks[network_type][network_id].get_model_weights()[0][0][0])
         ##if network_type == 1 and network_id == 1:
         ##    print "=== NEW WEIGHT 1,1[0][0][0]: ", self.nnetworks[1][1].get_model_weights()[0][0][0]
         
@@ -190,8 +193,8 @@ class ModDNN_ZMQ_Server:
         self.gradientCnts[network_type][network_id] -= 1
         if self.gradientCnts[network_type][network_id] == 0:
             print "Recieved {} gradient updates for {},{}.  Now pushing new networks!".format(
-                self.config.grad_update_cnt, network_type, network_id)
-            self.gradientCnts[network_type][network_id] = self.config.grad_update_cnt
+                self.config['grad_update_cnt'], network_type, network_id)
+            self.gradientCnts[network_type][network_id] = self.config['grad_update_cnt']
             self.publish_weights_available(network_type, network_id)
             
         # TODO Maybe send a response saying it went through, or it failed???
@@ -201,8 +204,11 @@ class ModDNN_ZMQ_Server:
         # Error check
         # if not isinstance(network_type, NetworkType):
         #     raise TypeError("network_type must be set to enum value of NetworkType")
+        self.output_update_cnt += 1
         if (network_id < 0):
             raise ValueError("network_id must be non-negative")
+            
+        print "=== ANNOUNCING NETWORK WEIGHT {},{} (# {}): {}".format(network_type, network_id, int(self.output_update_cnt), self.nnetworks[network_type][network_id].get_model_weights()[0][0][0])
 
         # Publish a message saying the weights are available! 
         self.message_bcast.send(Ops.compress_msg(Messages.NetworkWeightsReady, network_type, network_id))

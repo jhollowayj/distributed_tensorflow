@@ -14,6 +14,11 @@ class ModDNN_ZMQ_Client:
         self.world_id = 1
         self.task_id = 1
         self.agent_id = 1
+        self.network_id_lookup = {
+            NetworkType.World: self.world_id,
+            NetworkType.Task : self.task_id,
+            NetworkType.Agent: self.agent_id,
+        }
         
     def ZMQ_setup(self, config):
         self.context = zmq.Context()
@@ -54,7 +59,7 @@ class ModDNN_ZMQ_Client:
         server.grad_send.connect("tcp://%s:5557" % param_server)
         return server
             
-    def sendGradients(self, gradients, network_type = NetworkType.World, network_type_id = 1):
+    def sendGradients(self, gradients, network_type = NetworkType.World):
         ''' Send gradients to parameter server defiend in the config function.
             If gradients comes in as a list of networks, we will collapse it for you.
             network_type must be of type NetworkType enum defined in networks.py
@@ -63,8 +68,9 @@ class ModDNN_ZMQ_Client:
         # Error check
         # if not isinstance(network_type, NetworkType):
         #     raise TypeError("network_type must be set to enum value of NetworkType")
-        if (network_type_id < 0):
-            raise ValueError("network_type_id must be non-negative")
+        if (self.network_id_lookup[network_type] < 0):
+            raise ValueError("network_type_id must be non-negative, was {}".format(
+                self.network_id_lookup[network_type]))
             
         # Compress the weights
         compressedWeights = None
@@ -78,11 +84,12 @@ class ModDNN_ZMQ_Client:
             
         # Send the compressed weights
         msg = Ops.label_compressed_weights(
-                network_type, network_type_id, compressedWeights)
+                network_type, self.network_id_lookup[network_type], compressedWeights)
         server.grad_send.send(msg)
         
     callback_weights_available = None
-    def requestNetworkWeights(self, network_type = NetworkType.World, network_type_id = 1):
+    
+    def requestNetworkWeights(self, network_type = NetworkType.World):
         ''' Request network Weights
             network_type must be of type NetworkType enum defined in networks.py
             network_type_id isn't checked, but must be non-negative
@@ -91,15 +98,16 @@ class ModDNN_ZMQ_Client:
         # Error Check
         # if not isinstance(network_type, NetworkType):
         #     raise TypeError("network_type must be set to enum value of NetworkType")
-        if (network_type_id < 0):
-            raise ValueError("network_type_id must be non-negative")
+        if (self.network_id_lookup[network_type] < 0):
+            raise ValueError("network_type_id must be non-negative, was {}".format(
+                self.network_id_lookup[network_type]))
             
         # Get the specific server
         server = self.servers[network_type]
             
         # Send request
         msg = Ops.compress_request(
-                Messages.RequestingNetworkWeights, network_type, network_type_id)
+                Messages.RequestingNetworkWeights, network_type, self.network_id_lookup[network_type])
         server.param_rr.send(msg)
 
         # Receive Response

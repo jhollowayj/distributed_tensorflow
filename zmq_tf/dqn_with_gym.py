@@ -5,8 +5,9 @@ from mrkulk_dqn import DQN
 class Agent:
     def __init__(self, state_size=None, number_of_actions=1, just_greedy=False,
                  epsilon=0.1, batch_size=32, discount=0.99, memory=50,
-                 save_name='basic', save_freq=10, anealing_size=100,
-                 input_scaling_vector=None):
+                 save_name='basic', save_freq=10, annealing_size=100,
+                 input_scaling_vector=None, allow_local_nn_weight_updates=False,
+                 requested_gpu_vram_percent = 0.01):
         self.state_size = state_size
         self.number_of_actions = number_of_actions
         self.epsilon = epsilon
@@ -20,18 +21,26 @@ class Agent:
         self.experience = []
         self.i = 1
         self.save_freq = save_freq
-        self.build_model()
         self.iterations = 0
-        self.anealing_size = anealing_size * 100.0 # Steps * percent
+        self.annealing_size = annealing_size * 100 # number of steps, not number of games 
         self.just_greedy = just_greedy
         self.input_scaling_vector = input_scaling_vector
+        self.allow_local_nn_weight_updates = allow_local_nn_weight_updates
+        self.requested_gpu_vram_percent = requested_gpu_vram_percent
+
+        self.build_model()
+
+        if self.allow_local_nn_weight_updates:
+            print "NOTE: network is allowed to update his own weights!" 
         if self.input_scaling_vector is None:
             print "Not able to scale input.  This may lead to exploding gradients with multiple clients."
-        
+    
     def build_model(self):
         self.model = DQN(
             input_dims = self.state_size[0],
-            num_act = self.number_of_actions)
+            num_act = self.number_of_actions,
+            allow_local_nn_weight_updates = self.allow_local_nn_weight_updates,
+            requested_gpu_vram_percent = self.requested_gpu_vram_percent)
         self.train_fn = self.model.train
         self.value_fn = self.model.q
 
@@ -55,10 +64,10 @@ class Agent:
         else:
             repeat_random_periodically = False
             if repeat_random_periodically:
-                iterationCnt = (self.iterations) % (self.anealing_size*4.5)
+                iterationCnt = (self.iterations) % (self.annealing_size*4.5)
             else:
                 iterationCnt = self.iterations
-            return max(self.epsilon, 1-(iterationCnt / self.anealing_size))
+            return max(self.epsilon, 1-(float(iterationCnt) / self.annealing_size))
     def select_action(self, state, append=True):
         if self.input_scaling_vector is not None:
             # Scale the input to be between 0 and 1.  # Supposed to help with exploding gradients
@@ -69,11 +78,11 @@ class Agent:
                 state = 1.0 * state / self.input_scaling_vector
                 # print "State {} became {}".format(tmp, state) # Debugging
         
-                
         if append:
             self.episodes[-1].append(state)
         arr = []
         arr.append(state)
+        # print "CalcEpsilonState:{}".format(state)
         values = self.value_fn(arr)
         
         # if numpy.random.random() < self.epsilon:
@@ -139,16 +148,16 @@ class Agent:
         g2 = grs[2:4]
         g3 = grs[4:6]
         return [g1,g2,g3]
-    def getRewardsPerSquare(self, indexer=0, maze=None):
-        arr = numpy.zeros((12,12))
-        for x in range(len(arr)):
-            for y in range(len(arr[x])):
-                state = numpy.array([x,y])
-                res = self.value_fn([state[None, :]])
-                arr[x][y] = int(res[0][indexer])
-                # arr[x][y] = int(10*(res[0][0] - res[0][1]))+1
-                # arr[x][y] = self.select_action(state, append=False)[0]
-        arr *= maze
-        return arr
-                
         
+    def getRewardsPerSquare(self, world):
+        vals = [numpy.zeros((10,10))] * 4
+        for x in range(10):
+            for y in range(10):
+                state = world.get_state(x+1, y+1)
+                action_values = self.value_fn([state])
+                print "returned qvals: {}{} = {}".format(x, y, action_values)
+                for action_index, action_value in enumerate(action_values[0]):
+                    # print "=== ind:{}, val: {}".format(action_index, action_value)
+                    vals[action_index][x][y] = action_value
+        return vals
+                

@@ -4,10 +4,10 @@ from enum import Enum
 
 
 class direction(Enum):
-    s = 0
-    w = 1
-    n = 2
-    e = 3
+    n = 0
+    e = 1
+    s = 2
+    w = 3
 class maze_object(Enum):
     user = 0
     wall = 1
@@ -20,13 +20,19 @@ class maze_object(Enum):
 def agent1Mapping(): return [direction.n, direction.e, direction.s, direction.w]
 def agent2Mapping(): return [direction.e, direction.s, direction.w, direction.n]
 def agent3Mapping(): return [direction.s, direction.w, direction.n, direction.e]
-        
+def get_agent_mapping(id):
+    return {
+        1: agent1Mapping,
+        2: agent2Mapping,
+        3: agent3Mapping
+    }[id]()
 
 class JacobsMazeWorld(World):
-    def __init__(self, task_id = 2, action_mapping=agent3Mapping(), world_id=1):
-        self.action_mapping = action_mapping
+    def __init__(self, world_id=1, task_id = 1, agent_id = 1):
+        self.agent_id = agent_id
         self.task_id = task_id
         self.world_id = world_id
+        self.action_mapping = get_agent_mapping(self.agent_id)
 
         # Define start and end points
         self.startLocation = self.getStartPoint(self.task_id)
@@ -54,14 +60,14 @@ class JacobsMazeWorld(World):
         return arr
     def getStartPoint(self, taskId):
         return {
+            1: ( 5,  5),
             2: (10,  1),
-            1: ( 6,  6),
             3: ( 1, 10)
         }[taskId]
     def getGoalPoint(self, taskId):
         return {
-            2: ( 1, 10),
             1: ( 1,  1),
+            2: ( 1, 10),
             3: ( 3, 3)
         }[taskId]
 
@@ -130,13 +136,15 @@ class JacobsMazeWorld(World):
         dy = np.abs(self.agent_location[1] - self.endLocation[1])
         return dx, dy
         
-    def get_surrounding_square(self):
+    def get_surrounding_square(self, cur_x=None, cur_y=None):
+        if cur_x is None: cur_x = self.agent_location[0]
+        if cur_y is None: cur_y = self.agent_location[1]
         arr = []
         ### N S W E ###
-        arr.append(self.maze[self.agent_location[0]-1, self.agent_location[1]  ])
-        arr.append(self.maze[self.agent_location[0]+1, self.agent_location[1]  ])
-        arr.append(self.maze[self.agent_location[0], self.agent_location[1]-1])
-        arr.append(self.maze[self.agent_location[0], self.agent_location[1]+1])
+        arr.append(self.maze[cur_x-1, cur_y  ])
+        arr.append(self.maze[cur_x+1, cur_y  ])
+        arr.append(self.maze[cur_x,   cur_y-1])
+        arr.append(self.maze[cur_x,   cur_y+1])
         ### Diagonals ###
         # arr.append(self.maze[self.agent_location[0]-1, self.agent_location[1]-1])
         # arr.append(self.maze[self.agent_location[0]-1, self.agent_location[1]+1])
@@ -144,12 +152,15 @@ class JacobsMazeWorld(World):
         # arr.append(self.maze[self.agent_location[0]+1, self.agent_location[1]-1])
         # arr.append(self.maze[self.agent_location[0]+1, self.agent_location[1]+1])
         return arr
+
     give_expanded_space = True
-    def get_state(self):
+    def get_state(self, cur_x=None, cur_y=None):
+        if cur_x is None: cur_x = self.agent_location[0]
+        if cur_y is None: cur_y = self.agent_location[1]
         if self.give_expanded_space:
             arr = []
             arr += self.agent_location
-            arr += self.get_surrounding_square() # Sync these with get_state__maxes
+            arr += self.get_surrounding_square(cur_x, cur_y) # Sync these with get_state__maxes
             # arr += self.calc_distance_to_goal()
             return arr
         else:

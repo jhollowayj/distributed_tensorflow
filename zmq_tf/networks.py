@@ -14,8 +14,8 @@ class Messages(Enum):
 
 params = {
     'world_input_size': 6,
-    'world_to_task': 100,
-    'task_to_agent': 100,
+    'world_to_task': 1000,
+    'task_to_agent': 1000,
     'agent_1_action_space_size': 4
 }
 

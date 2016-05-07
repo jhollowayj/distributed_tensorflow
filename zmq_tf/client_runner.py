@@ -18,7 +18,6 @@ parser.add_argument('--agent_id', '-aid', default=1, type=int, required=False, h
 # AGENT
 parser.add_argument('--num_episodes', '-ne', default=10000,  type=int, required=False, help="")
 parser.add_argument('--annealing_size', '-an', default=800,  type=int, required=False, help="")
-parser.add_argument('--exp_replay_memory', '-mem', default=10000,  type=int, required=False, help="")
 parser.add_argument('--epsilon', '-e', default=0.04,  type=float, required=False, help="")
 parser.add_argument('--observer', '-o', default=False,  type=bool, required=False, help="")
 # NEURAL-NET            # Discount Factor, Learning Rate, etc. TODO
@@ -68,7 +67,6 @@ agent = dqn_with_gym.Agent(
     state_size=world.get_state_space(),
     number_of_actions=len(world.get_action_space()),
     input_scaling_vector=world.get_state__maxes(),
-    memory=args.exp_replay_memory,
     epsilon=args.epsilon,
     batch_size=5,
     annealing_size=int(args.annealing_size), # annealing_size=args.annealing_size,
@@ -88,7 +86,7 @@ if not args.ignore_server:
 ### RUN !!!!!!!!!!!!! ###
 if args.write_csv:
     csv = open(args.csv_filename,'w', 0)
-    csv.write("episode,total_reward,mean_cost,max_q,endEpsilon,didFinish\n")
+    csv.write("episode,total_reward,cost,max_q,endEpsilon,didFinish\n")
 starttime = time.time()
 update_cnt = 1
 didwin, window = [], 25
@@ -96,7 +94,7 @@ for episode in xrange(args.num_episodes):
     done = False
     world.reset()
     agent.new_episode()
-    total_cost, frame, max_q = 0.0, 0, 0 - np.Infinity 
+    frame, max_q = 0, 0 - np.Infinity 
     arr, actions = world.heatmap_adder(), [0,0,0,0]
     while world.is_running() and world.get_time() < args.max_steps_per_episode: 
         frame += 1
@@ -105,16 +103,16 @@ for episode in xrange(args.num_episodes):
         cur_state = world.get_state()
         action, values = agent.select_action(np.array(cur_state))
         reward = world.act(action)
-        total_cost += agent.train(reward) # IS this where it goes wrong?
 
         max_q = max(max_q, np.max(values))
         actions[action] += 1
         arr += world.heatmap_adder()
     
-        if not args.ignore_server and update_cnt % args.gradients_until_send == 0:
+    cost = agent.train(reward) # IS this where it goes wrong?
+    if not args.ignore_server:
+        if update_cnt % args.gradients_until_send == 0:
             send_gradients()
-        if not args.ignore_server:
-            tf_client.poll_once() # calls the callback added above if weights available!
+        tf_client.poll_once() # calls the callback added above if weights available!
     # REPORTTING
     runtime = time.time() - starttime
     totaltime = runtime / (episode+1) * args.num_episodes
@@ -122,10 +120,9 @@ for episode in xrange(args.num_episodes):
 
     windlen = int(window if window < len(didwin) else len(didwin))
     print "episode: %6d::%4d/%4ds:: Re:%6.3f, m.cost: %13.9f, max_q: %10.6f, end.E: %4.3f, W?: %s, AvgW%d: %4.2f" % \
-          (episode, runtime, totaltime, world.get_score(), (total_cost/frame),
+          (episode, runtime, totaltime, world.get_score(), (cost/frame),
            max_q, agent.calculate_epsilon(), "N" if world.is_running() else "Y", 
            window, 100.0*np.sum(didwin[-windlen:])/windlen) 
     if args.write_csv:
-        csv.write("{},{},{},{},{},{}\n".format(e, world.get_score(), (total_cost/frame), max_q, agent.calculate_epsilon(), 0 if world.is_running() else 1))
-
+        csv.write("{},{},{},{},{},{}\n".format(e, world.get_score(), (cost/frame), max_q, agent.calculate_epsilon(), 0 if world.is_running() else 1))
 if args.write_csv: csv.close()

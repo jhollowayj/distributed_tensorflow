@@ -4,7 +4,7 @@ from mrkulk_dqn import DQN
 
 class Agent:
     def __init__(self, state_size=None, number_of_actions=1, just_greedy=False,
-                 epsilon=0.1, batch_size=32, discount=0.99, memory=50,
+                 epsilon=0.1, batch_size=32, discount=0.99,
                  save_name='basic', save_freq=10, annealing_size=100,
                  input_scaling_vector=None, allow_local_nn_weight_updates=False,
                  requested_gpu_vram_percent = 0.01, device_to_use = 0):
@@ -13,12 +13,7 @@ class Agent:
         self.epsilon = epsilon
         self.batch_size = batch_size
         self.discount = discount
-        self.memory = memory # How many past episodes to remember (i.e. runs through the maze)
         self.save_name = save_name
-        self.episodes = []
-        self.actions = []
-        self.rewards = []
-        self.experience = []
         self.i = 1
         self.save_freq = save_freq
         self.iterations = 0
@@ -47,16 +42,13 @@ class Agent:
         self.value_fn = self.model.q
 
     def new_episode(self):
-        self.episodes.append([])
-        self.actions.append([])
-        self.rewards.append([])
-        self.episodes = self.episodes[-self.memory:]
-        self.actions = self.actions[-self.memory:]
-        self.rewards = self.rewards[-self.memory:]
+        self.states = []
+        self.actions = []
+        self.rewards = []
         self.i += 1
         if self.i % self.save_freq == 0:
             self.model.save_weights('{}.h5'.format(self.save_name), True)
-
+            
     def end_episode(self):
         pass
 
@@ -76,63 +68,50 @@ class Agent:
             if len(state) != len(self.input_scaling_vector):
                 print "+=============+ ERROR +==============+\n scaling input doesn't have the same shape... :("
             else:
-                tmp = state
+                # tmp = state
                 state = 1.0 * state / self.input_scaling_vector
                 # print "State {} became {}".format(tmp, state) # Debugging
-        
-        if append:
-            self.episodes[-1].append(state)
-        arr = []
-        arr.append(state)
-        # print "CalcEpsilonState:{}".format(state)
-        values = self.value_fn(arr)
+            
+        values = self.value_fn([state])
         
         # if numpy.random.random() < self.epsilon:
         if numpy.random.random() < self.calculate_epsilon():
             action = numpy.random.randint(self.number_of_actions)
-        else:
-            action = values.argmax()
+        else: action = values.argmax()
+
         if append:
-            self.actions[-1].append(action)
+            self.states.append(state)
+            self.actions.append(action)
+            
         return action, values
 
     def train(self, reward):
-        self.rewards[-1].append(reward)
+        self.rewards.append(reward)
         return self.iterate()
 
     def iterate(self):
-        N = len(self.episodes)
-        S, NS, A, R, T = [], [], [], [], []  
-        
-        P = numpy.array([sum(episode)/len(episode) for episode in self.rewards]).astype(float)
-        P *= numpy.abs(P) # Square it (keeping the sign)
-        P -= numpy.min(P) # Set min to zero
-        P += 1 # still give the little guy a chance
-        P /= numpy.sum(P) # Scale to 0-1 (to sum to one)
-            
-        randomEpisode = True
-        for i in xrange(self.batch_size):
-            if randomEpisode:
-                episodeId = random.randint(max(0, N-self.memory), N-1)   # Pick a past episode
-            else:
-                episodeId = numpy.random.choice(len(P), p=P)
-            # print "Chosens stuff: {}/{} L:{} R:{}".format(episodeId, len(self.episodes), len(self.episodes[episodeId]), self.rewards[episodeId][-1])
-            
-            num_frames = len(self.episodes[episodeId])      # Choose a random state from that episode 
-            frame = random.randint(0, num_frames-1)         #   (cont)
-            
-            S.append(self.episodes[episodeId][frame])          # Adds state to batch
-            T.append(1 if frame == num_frames - 1 else 0)      # Is it the termial of that episode?
-            NS.append(self.episodes[episodeId][frame+1] if frame < num_frames - 1 else None)   #   Add next state
-            A.append(self.onehot(self.actions[episodeId][frame]))           # Add action
-            R.append(self.rewards[episodeId][frame])           # Add reward
-            
-            
-        S, NS, A, R, T = numpy.array(S), numpy.array(NS), numpy.array(A), numpy.array(R), numpy.array(T)
-        
         self.iterations += 1
-        cost = self.train_fn(S, A, T, NS, R)              # TRAIN!!!!!!!
+
+        S = self.states
+        NS= S[1:] + [None]
+        A = [self.onehot(act) for act in self.actions]
+        R = self.rewards
+        T = [0]*len(S)
+        T[-1] = 1 # Last one was a terminal
         
+        S.reverse()
+        NS.reverse()
+        A.reverse()
+        R.reverse()
+        T.reverse()
+        T.reverse()
+        
+        cost = self.train_fn(
+            numpy.array(S),
+            numpy.array(A),
+            numpy.array(T),
+            numpy.array(NS),
+            numpy.array(R))
         return cost
 
     def onehot(self, action):
@@ -162,4 +141,4 @@ class Agent:
                     # print "=== ind:{}, val: {}".format(action_index, action_value)
                     vals[action_index][x][y] = action_value
         return vals
-                
+    

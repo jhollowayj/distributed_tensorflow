@@ -63,23 +63,26 @@ class Shared_Model_Object:
         
     def get_model_weights(self):
         ''' Returns list of np.arrays containing the weights '''
-        return [l.eval(self.sess) for l in self.layers]
+        # return [l.eval(self.sess) for l in self.layers]
+        return self.sess.run(self.layers)
         
     def set_model_weights(self, weights):
         ''' Takes in list of np.arrays containing the new weights to use '''
         self._errorCheckIncomingWeights(weights)
-        todo = []
-        for index, lay in enumerate(self.layers):
-            todo.append(lay.assign(weights[index]))
-        self.sess.run(todo)
-        
+        # todo = []
+        # for index, lay in enumerate(self.layers):
+        #     todo.append(lay.assign(weights[index]))
+        # self.sess.run(todo)
+        self.sess.run([lay.assign_add(weights[index]) for index, lay in enumerate(self.layers)])
+                
     def add_gradients(self, weights):
         ''' Takes in list of np.arrays containing gradients to apply (+=) to weights '''
         self._errorCheckIncomingWeights(weights)
-        todo = []
-        for index, lay in enumerate(self.layers):
-            todo.append(lay.assign(lay + weights[index]))
-        self.sess.run(todo)
+        # todo = []
+        # for index, lay in enumerate(self.layers):
+        #     todo.append(lay.assign(lay + weights[index]))
+        # self.sess.run(todo)
+        self.sess.run([lay.assign_add(weights[index]) for index, lay in enumerate(self.layers)])
     
     def _errorCheckIncomingWeights(self, weights):
         ''' Checks to make sure all of the shapes line up, throws error if not the same '''

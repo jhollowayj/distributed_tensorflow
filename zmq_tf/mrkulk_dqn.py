@@ -7,7 +7,7 @@ class DQN:
             rms_eps = 1e-6, rms_decay=0.99,
             allow_local_nn_weight_updates=False,
             requested_gpu_vram_percent=0.01,
-            device_to_use=0):
+            device_to_use=0, verbose = 0):
         self.params = {
             'input_dims': input_dims,
             'layer_1_hidden': 1000,
@@ -19,14 +19,21 @@ class DQN:
             'rms_decay': rms_decay,
             'allow_local_nn_weight_updates': allow_local_nn_weight_updates,
             'requested_gpu_vram_percent': requested_gpu_vram_percent, 
+            'verbose': verbose,
         }
+        
         if self.params['allow_local_nn_weight_updates']:
             print "NOTE: network is allowed to update his own weights!" 
 
-        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=self.params['requested_gpu_vram_percent'])
-        self.sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+        device2use = {-1: "/cpu:0", 0: "/gpu:0", 1: "/gpu:1"}[device_to_use]
+        print "using Device: {}".format(device2use)
+        with tf.device(device2use):
+            if device_to_use == -1:
+                self.sess = tf.Session()
+            else:
+                gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=self.params['requested_gpu_vram_percent'])
+                self.sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
         
-        with tf.device({-1: "/cpu:0", 0: "/gpu:0", 1: "/gpu:1"}[device_to_use]):
             self.x = tf.placeholder(tf.float32,[None, self.params['input_dims']], name="nn_x")
             self.q_t = tf.placeholder(tf.float32,[None], name="nn_q_t")
 
@@ -63,29 +70,20 @@ class DQN:
             self.Q_pred = tf.reduce_sum(tf.mul(self.y,self.actions), reduction_indices=1, name="nn_q_pred")
             self.cost = tf.reduce_sum(tf.pow(tf.sub(self.yj, self.Q_pred), 2), name="nn_cost")
 
-            self.rmsprop = tf.train.RMSPropOptimizer(self.params['lr'],self.params['rms_decay'],0.0,self.params['rms_eps']).minimize(self.cost) # Orig
-            # # Failed attempt.   :(  8 hours later... we go back to the original idea...
-            # self.rmsprop = tf.train.RMSPropOptimizer(self.params['lr'],self.params['rms_decay'],0.0,self.params['rms_eps'])
-            # self.comp_grad = self.rmsprop.compute_gradients(self.cost)
-            # self.app_grads = self.rmsprop.apply_gradients(self.comp_grad)
-
             self.rmsprop = tf.train.RMSPropOptimizer(self.params['lr'],self.params['rms_decay'],0.0,self.params['rms_eps'])
             self.comp_grads = self.rmsprop.compute_gradients(self.cost)
             self.grad_placeholder = [(tf.placeholder("float", shape=grad[1].get_shape(), name="grad_placeholder"), grad[1]) for grad in self.comp_grads]
             self.apply_grads = self.rmsprop.apply_gradients(self.grad_placeholder)
-            
-            # # Used >> # results = self.sess.run([grad for grad, _ in self.comp_grad] + [self.app_grads, self.cost], feed_dict=feed_dict)
-            # # grads_and_vars, _, costs = self.sess.run([self.comp_grad, self.app_grads, self.cost], feed_dict=feed_dict) # Try two!
-            
-        init = tf.initialize_all_variables()
-        self.sess.run(init)
-        print "###\n### Initialized MrKulk's network\n###"
+
+        self.sess.run(tf.initialize_all_variables())
+        print "###\n### Networks initialized\n### Ready to begin\n###"
     
     def set_weights(self, weights, network_type=1):
         # print "############## Setting weights: layer {}, size of incoming weights: {} ({},{})".format(network_type,len(weights), weights[0].shape, weights[1].shape)
         todo = []
         if network_type == 1: # World
-            print "SETTING WEIGHTS FOR {}: {}".format(network_type, weights[0][0][0])
+            if self.params['verbose'] >= 1:
+                print "SETTING WEIGHTS FOR {}: {}".format(network_type, weights[0][0][0])
             todo.append(self.w1.assign(weights[0]))
             todo.append(self.b1.assign(weights[1]))
         elif network_type == 2: # Task
@@ -123,7 +121,8 @@ class DQN:
         for grad in grads:              # We only want the gradient average, not the giant number
             grad /= num_grads_summed    #(should also help with exploding gradients)
         ### End: Average the gradients now ###
-        print "Returning grads[0][0][0] of {} / {} = {}".format(start, num_grads_summed, grads[0][0][0])
+        if self.params['verbose'] >= 1:
+            print "Returning grads[0][0][0] of {} / {} = {}".format(start, num_grads_summed, grads[0][0][0])
         return grads
 
     def train(self,bat_s,bat_a,bat_t,bat_n,bat_r):

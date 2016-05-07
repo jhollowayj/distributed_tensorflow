@@ -7,7 +7,7 @@ class Agent:
                  epsilon=0.1, batch_size=32, discount=0.99, memory=50,
                  save_name='basic', save_freq=10, annealing_size=100,
                  input_scaling_vector=None, allow_local_nn_weight_updates=False,
-                 requested_gpu_vram_percent = 0.01):
+                 requested_gpu_vram_percent = 0.01, device_to_use = 0):
         self.state_size = state_size
         self.number_of_actions = number_of_actions
         self.epsilon = epsilon
@@ -27,6 +27,7 @@ class Agent:
         self.input_scaling_vector = input_scaling_vector
         self.allow_local_nn_weight_updates = allow_local_nn_weight_updates
         self.requested_gpu_vram_percent = requested_gpu_vram_percent
+        self.device_to_use = device_to_use
 
         self.build_model()
 
@@ -40,7 +41,8 @@ class Agent:
             input_dims = self.state_size[0],
             num_act = self.number_of_actions,
             allow_local_nn_weight_updates = self.allow_local_nn_weight_updates,
-            requested_gpu_vram_percent = self.requested_gpu_vram_percent)
+            requested_gpu_vram_percent = self.requested_gpu_vram_percent,
+            device_to_use = self.device_to_use)
         self.train_fn = self.model.train
         self.value_fn = self.model.q
 

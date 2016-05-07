@@ -24,10 +24,12 @@ parser.add_argument('--observer', '-o', default=False,  type=bool, required=Fals
 # NEURAL-NET            # Discount Factor, Learning Rate, etc. TODO
 parser.add_argument('--allow_local_nn_weight_updates', '-nnu', default=False,  type=bool, required=False, help="")
 parser.add_argument('--requested_gpu_vram_percent', '-vram', default=0.01,  type=float, required=False, help="")
+parser.add_argument('--device_to_use', '-device', default=1,  type=int, required=False, help="")
 # RUNNER
 parser.add_argument('--max_steps_per_episode', '-msteps', default=200,  type=int, required=False, help="")
 parser.add_argument('--write_csv', default=False,  type=bool, required=False, help="")
 parser.add_argument('--csv_filename', default="tmp_res.csv",  type=bool, required=False, help="")
+parser.add_argument('--verbose', '-v', default=1,  type=int, required=False, help="")
 # CLIENT-SERVER
 parser.add_argument('--gradients_until_send', '-grads', default=500,  type=int, required=False, help="")
 parser.add_argument('--ignore_server', default=False,  type=bool, required=False, help="")
@@ -36,14 +38,14 @@ args = parser.parse_args()
 
 ### OTHER FUNCTIONS ###
 def send_gradients():
-    # print "     sending Gradients!!!!"
+    if args.verbose >= 1: print "     sending Gradients!!!!"
     s = time.time()
     grads = agent.get_gradients()
     tf_client.sendGradients(grads[0], NetworkType.World)
     tf_client.sendGradients(grads[1], NetworkType.Task)
     tf_client.sendGradients(grads[2], NetworkType.Agent)
     end = time.time()
-    print "   Time to send gradients was {} seconds".format(end-s)
+    if args.verbose >= 2: print "   Time to send gradients was {} seconds".format(end-s)
 def cb(network_type, network_id):
     # print "CALLBACK: {} {}".format(network_type, network_id)
     ws = tf_client.requestNetworkWeights(network_type)
@@ -72,6 +74,7 @@ agent = dqn_with_gym.Agent(
     annealing_size=int(args.annealing_size), # annealing_size=args.annealing_size,
     allow_local_nn_weight_updates = args.allow_local_nn_weight_updates,
     requested_gpu_vram_percent = args.requested_gpu_vram_percent,
+    device_to_use = args.device_to_use,
     )
 
 if not args.ignore_server:
@@ -88,6 +91,7 @@ if args.write_csv:
     csv.write("episode,total_reward,mean_cost,max_q,endEpsilon,didFinish\n")
 starttime = time.time()
 update_cnt = 1
+didwin, window = [], 25
 for episode in xrange(args.num_episodes):
     done = False
     world.reset()
@@ -114,10 +118,13 @@ for episode in xrange(args.num_episodes):
     # REPORTTING
     runtime = time.time() - starttime
     totaltime = runtime / (episode+1) * args.num_episodes
+    didwin.append(0 if world.is_running() else 1)
 
-    print "episode: %6d::%4d/%4ds:: total reward: %6.3f, mean cost: %13.9f, max_q: %10.6f, endEpsilon: %4.3f, didFinish: %s" % \
+    windlen = int(window if window < len(didwin) else len(didwin))
+    print "episode: %6d::%4d/%4ds:: Re:%6.3f, m.cost: %13.9f, max_q: %10.6f, end.E: %4.3f, W?: %s, AvgW%d: %4.2f" % \
           (episode, runtime, totaltime, world.get_score(), (total_cost/frame),
-           max_q, agent.calculate_epsilon(), "No" if world.is_running() else "Yes") 
+           max_q, agent.calculate_epsilon(), "N" if world.is_running() else "Y", 
+           window, 100.0*np.sum(didwin[-windlen:])/windlen) 
     if args.write_csv:
         csv.write("{},{},{},{},{},{}\n".format(e, world.get_score(), (total_cost/frame), max_q, agent.calculate_epsilon(), 0 if world.is_running() else 1))
 

@@ -1,15 +1,19 @@
 import zmq
-
-from networks import NetworkType, Messages
-import zmqconfig
 import Ops
+from networks import NetworkType, Messages
 
 class Object(object):
     pass
     
 class ModDNN_ZMQ_Client:
     def __init__(self, world_id = 1, task_id = 1, agent_id = 1):
-        config = zmqconfig.getConfig()
+        config = {
+            'just_one_server': True,
+            'serverHostName': "localhost",
+            'WorldServerHostName': "localhost",
+            'TaskServerHostName': "localhost",
+            'AgentServerHostName': "localhost",
+        }
         self.ZMQ_setup(config) 
         self.world_id = 1
         self.task_id = 1
@@ -24,18 +28,18 @@ class ModDNN_ZMQ_Client:
         self.context = zmq.Context()
         self.poller = zmq.Poller()
         self.servers = {}
-        if config.just_one_server:
-            print "Adding just one server", config.serverHostName
-            server = self.buildServerConnections(config.serverHostName)
+        if config['just_one_server']:
+            print "Adding just one server", config['serverHostName']
+            server = self.buildServerConnections(config['serverHostName'])
             self.servers[NetworkType.World] = server
             self.servers[NetworkType.Task]  = server
             self.servers[NetworkType.Agent] = server
             self.poller.register(server.message_recv, zmq.POLLIN)
         else:
             print "Adding several server"
-            self.servers[NetworkType.World] = self.buildServerConnections(config.WorldServerHostName)
-            self.servers[NetworkType.Task]  = self.buildServerConnections(config.TaskServerHostName)
-            self.servers[NetworkType.Agent] = self.buildServerConnections(config.AgentServerHostName)
+            self.servers[NetworkType.World] = self.buildServerConnections(config['WorldServerHostName'])
+            self.servers[NetworkType.Task]  = self.buildServerConnections(config['TaskServerHostName'])
+            self.servers[NetworkType.Agent] = self.buildServerConnections(config['AgentServerHostName'])
             for server in self.servers:
                 print "(Note: adding multiple server.msg_recv to poller)"
                 self.poller.register(server.message_recv, zmq.POLLIN)

@@ -1,5 +1,5 @@
 import server
-from networks import NetworkType
+from networks_np import NetworkType
 
 ### COMMAND LINE ARGUMENTS ###
 import argparse

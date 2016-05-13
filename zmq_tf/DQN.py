@@ -31,7 +31,8 @@ class DQN:
             if device_to_use == -1:
                 self.sess = tf.Session()
             else:
-                gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=self.params['requested_gpu_vram_percent'])
+                gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=self.params['requested_gpu_vram_percent'],
+                                            allow_growth=True, deferred_deletion_bytes=1)
                 self.sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
         
             self.x = tf.placeholder(tf.float32,[None, self.params['input_dims']], name="nn_x")
@@ -58,6 +59,9 @@ class DQN:
             self.w3 = tf.Variable(tf.random_normal([layer_2_hidden, self.params['num_act']], stddev=0.01, dtype=tf.float32), name="nn_L3_w")
             self.b3 = tf.Variable(tf.constant(0.1, shape=[self.params['num_act']], dtype=tf.float32), name="nn_L3_b")
             self.y = tf.add(tf.matmul(self.o2,self.w3),self.b3, name="y_OR_nn_L3_output")
+            ##
+            self.all_layers = [self.w1, self.b1, self.w2, self.b2, self.w3, self.b3]
+            ##
 
             ### Gradients ###
             self.clear_gradients()
@@ -71,6 +75,7 @@ class DQN:
             self.cost = tf.reduce_sum(tf.pow(tf.sub(self.yj, self.Q_pred), 2), name="nn_cost")
 
             self.rmsprop = tf.train.RMSPropOptimizer(self.params['lr'],self.params['rms_decay'],0.0,self.params['rms_eps'])
+            self.rmsprop_min = tf.train.RMSPropOptimizer(self.params['lr'],self.params['rms_decay'],0.0,self.params['rms_eps']).minimize(self.cost)
             self.comp_grads = self.rmsprop.compute_gradients(self.cost)
             self.grad_placeholder = [(tf.placeholder("float", shape=grad[1].get_shape(), name="grad_placeholder"), grad[1]) for grad in self.comp_grads]
             self.apply_grads = self.rmsprop.apply_gradients(self.grad_placeholder)
@@ -78,21 +83,24 @@ class DQN:
         self.sess.run(tf.initialize_all_variables())
         print "###\n### Networks initialized\n### Ready to begin\n###"
     
+    assign_cnt = 0
     def set_weights(self, weights, network_type=1):
         # print "############## Setting weights: layer {}, size of incoming weights: {} ({},{})".format(network_type,len(weights), weights[0].shape, weights[1].shape)
         todo = []
         if network_type == 1: # World
             if self.params['verbose'] >= 1:
                 print "SETTING WEIGHTS FOR {}: {}".format(network_type, weights[0][0][0])
-            todo.append(self.w1.assign(weights[0]))
-            todo.append(self.b1.assign(weights[1]))
+            todo.append(self.w1.assign(weights[0], use_locking=True))
+            todo.append(self.b1.assign(weights[1], use_locking=True))
         elif network_type == 2: # Task
-            todo.append(self.w2.assign(weights[0]))
-            todo.append(self.b2.assign(weights[1]))
+            todo.append(self.w2.assign(weights[0], use_locking=True))
+            todo.append(self.b2.assign(weights[1], use_locking=True))
         elif network_type == 3: # Agent
-            todo.append(self.w3.assign(weights[0]))
-            todo.append(self.b3.assign(weights[1]))
+            todo.append(self.w3.assign(weights[0], use_locking=True))
+            todo.append(self.b3.assign(weights[1], use_locking=True))
         self.sess.run(todo)
+        self.assign_cnt += len(todo)
+        print "assign cnt = {}".format(self.assign_cnt)
     def stash_gradients(self, episode_delta):
         # print "Stashing Gradient: {}".format(episode_delta[0][0][0])
         self.num_grads_accumulated += 1
@@ -126,6 +134,25 @@ class DQN:
         return grads
 
     def train(self,bat_s,bat_a,bat_t,bat_n,bat_r):
+        # return self._train_split(bat_s,bat_a,bat_t,bat_n,bat_r)
+        return self._train_single(bat_s,bat_a,bat_t,bat_n,bat_r)
+   
+    def _train_single(self,bat_s,bat_a,bat_t,bat_n,bat_r):
+        '''Please note: This allows the networks to change their weights!'''
+        feed_dict={self.x: bat_s, self.q_t: np.zeros(bat_n.shape[0]), self.actions: bat_a, self.terminals:bat_t, self.rewards: bat_r}
+        q_t = self.sess.run(self.y,feed_dict=feed_dict)
+        q_t = np.amax(q_t,axis=1)
+        feed_dict={self.x: bat_s, self.q_t: q_t, self.actions: bat_a, self.terminals:bat_t, self.rewards: bat_r}
+        
+        starts = self.sess.run(self.all_layers)
+        _, costs = self.sess.run([self.rmsprop_min, self.cost], feed_dict=feed_dict)
+        ends = self.sess.run(self.all_layers)
+        
+        self.stash_gradients([ends[i] - starts[i] for i in range(len(starts))])
+        
+        return costs
+         
+    def _train_split(self,bat_s,bat_a,bat_t,bat_n,bat_r):
         feed_dict={self.x: bat_s, self.q_t: np.zeros(bat_n.shape[0]), self.actions: bat_a, self.terminals:bat_t, self.rewards: bat_r}
         q_t = self.sess.run(self.y,feed_dict=feed_dict)
         q_t = np.amax(q_t,axis=1)
@@ -145,6 +172,7 @@ class DQN:
             
         
         if self.params['allow_local_nn_weight_updates']:
+            start_vals = self.sess.run(self.w1)
             feed_dict2={self.x: bat_s, self.q_t: q_t, self.actions: bat_a, self.terminals:bat_t, self.rewards: bat_r,
                     self.grad_placeholder[0][0]: grad_vals[0], # Change these lines to add in grad_placeholders to use the code
                     self.grad_placeholder[1][0]: grad_vals[1], # Found in this SO post here... http://stackoverflow.com/questions/34687761/ 
@@ -154,6 +182,10 @@ class DQN:
                     self.grad_placeholder[5][0]: grad_vals[5],
                     }
             self.sess.run(self.apply_grads, feed_dict=feed_dict2) # TODO TODO TODO currently returning None.  Not sure why, but that needs to be fixed.
+            end_vals = self.sess.run(self.w1)
+            diff_w1 = end_vals - start_vals
+            offbyfactor = diff_w1[0][0] / grad_vals[0][0][0] 
+            print "The off factor was: ", offbyfactor 
         costs = self.sess.run(self.cost, feed_dict=feed_dict)
 
         # Grab and store the deltas to ship to the server

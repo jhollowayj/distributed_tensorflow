@@ -13,7 +13,7 @@ class Messages(Enum):
     # Not sure if there were any other messages to pass, but I figured I'd put this here.
 
 params = {
-    'world_input_size': 6,
+    'world_input_size': 2,
     'world_to_task': 1000,
     'task_to_agent': 1000,
     'agent_1_action_space_size': 4

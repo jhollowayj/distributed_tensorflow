@@ -1,10 +1,10 @@
 import numpy as np
 import time
 import os, sys
-sys.path.append(os.path.abspath(os.path.join('..', 'simpleMazeWorlds')))
+# sys.path.append(os.path.abspath(os.path.join('..', 'simpleMazeWorlds')))
 
 import client
-import dqn_with_gym
+import GenericAgent
 import JacobsMazeWorld
 from networks import NetworkType, Messages
 
@@ -17,7 +17,7 @@ parser.add_argument('--task_id', '-tid',  default=1, type=int, required=False, h
 parser.add_argument('--agent_id', '-aid', default=1, type=int, required=False, help="ID of the agent you want to use (nsew/sewn/ewns/etc")
 # AGENT
 parser.add_argument('--num_episodes', '-ne', default=10000,  type=int, required=False, help="")
-parser.add_argument('--annealing_size', '-an', default=800,  type=int, required=False, help="")
+parser.add_argument('--annealing_size', '-an', default=100,  type=int, required=False, help="")
 parser.add_argument('--epsilon', '-e', default=0.04,  type=float, required=False, help="")
 parser.add_argument('--observer', '-o', default=False,  type=bool, required=False, help="")
 # NEURAL-NET            # Discount Factor, Learning Rate, etc. TODO
@@ -30,8 +30,8 @@ parser.add_argument('--write_csv', default=False,  type=bool, required=False, he
 parser.add_argument('--csv_filename', default="tmp_res.csv",  type=bool, required=False, help="")
 parser.add_argument('--verbose', '-v', default=1,  type=int, required=False, help="")
 # CLIENT-SERVER
-parser.add_argument('--gradients_until_send', '-grads', default=500,  type=int, required=False, help="")
-parser.add_argument('--ignore_server', default=False,  type=bool, required=False, help="")
+parser.add_argument('--gradients_until_send', '-grads', default=1,  type=int, required=False, help="")
+parser.add_argument('--ignore_server', '-is', default=False,  type=bool, required=False, help="")
 args = parser.parse_args()
 ### COMMAND LINE ARGUMENTS ###
 
@@ -62,8 +62,7 @@ tf_client = client.ModDNN_ZMQ_Client(
     task_id = args.task_id,
     agent_id = args.agent_id)
     
-    
-agent = dqn_with_gym.Agent(
+agent = GenericAgent.Agent(
     state_size=world.get_state_space(),
     number_of_actions=len(world.get_action_space()),
     input_scaling_vector=world.get_state__maxes(),
@@ -94,7 +93,7 @@ for episode in xrange(args.num_episodes):
     done = False
     world.reset()
     agent.new_episode()
-    frame, max_q = 0, 0 - np.Infinity 
+    frame, max_q, min_q, sum_q = 0, 0 - np.Infinity, np.Infinity, 0.0
     arr, actions = world.heatmap_adder(), [0,0,0,0]
     while world.is_running() and world.get_time() < args.max_steps_per_episode: 
         frame += 1
@@ -105,6 +104,9 @@ for episode in xrange(args.num_episodes):
         reward = world.act(action)
 
         max_q = max(max_q, np.max(values))
+        min_q = min(min_q, np.min(values))
+        sum_q += np.sum(values)/len(values)
+        
         actions[action] += 1
         arr += world.heatmap_adder()
     
@@ -119,9 +121,9 @@ for episode in xrange(args.num_episodes):
     didwin.append(0 if world.is_running() else 1)
 
     windlen = int(window if window < len(didwin) else len(didwin))
-    print "episode: %6d::%4d/%4ds:: Re:%6.3f, m.cost: %13.9f, max_q: %10.6f, end.E: %4.3f, W?: %s, AvgW%d: %4.2f" % \
-          (episode, runtime, totaltime, world.get_score(), (cost/frame),
-           max_q, agent.calculate_epsilon(), "N" if world.is_running() else "Y", 
+    print "episode: %6d::%4d/%4ds:: Re:%5.1f, QMa/Mi/Av:%7.3f/%7.3f/%7.3f, m.cost: %9.4f, end.E: %4.3f, W?: %s, AvgW%d: %3.1f%%" % \
+          (episode, runtime, totaltime, world.get_score(), max_q, min_q, (sum_q / frame),
+           (cost/frame), agent.calculate_epsilon(), "N" if world.is_running() else "Y", 
            window, 100.0*np.sum(didwin[-windlen:])/windlen) 
     if args.write_csv:
         csv.write("{},{},{},{},{},{}\n".format(e, world.get_score(), (cost/frame), max_q, agent.calculate_epsilon(), 0 if world.is_running() else 1))

@@ -1,6 +1,6 @@
 import random
 import numpy
-from mrkulk_dqn import DQN
+from DQN import DQN
 
 class Agent:
     def __init__(self, state_size=None, number_of_actions=1, just_greedy=False,
@@ -99,12 +99,14 @@ class Agent:
         T = [0]*len(S)
         T[-1] = 1 # Last one was a terminal
         
-        S.reverse()
-        NS.reverse()
-        A.reverse()
-        R.reverse()
-        T.reverse()
-        T.reverse()
+        play_backwards = False
+        if play_backwards:
+            S.reverse()
+            NS.reverse()
+            A.reverse()
+            R.reverse()
+            T.reverse()
+            T.reverse()
         
         cost = self.train_fn(
             numpy.array(S),

@@ -160,7 +160,7 @@ class JacobsMazeWorld(World):
         if self.give_expanded_space:
             arr = []
             arr += self.agent_location
-            arr += self.get_surrounding_square(cur_x, cur_y) # Sync these with get_state__maxes
+            # arr += self.get_surrounding_square(cur_x, cur_y) # Sync these with get_state__maxes
             # arr += self.calc_distance_to_goal()
             return arr
         else:
@@ -169,7 +169,7 @@ class JacobsMazeWorld(World):
         if self.give_expanded_space:
             arr = []
             arr += [11, 11] # Agent location
-            arr += [10,10,10,10] # Surrounding Square # I think 10 is an ok value... it should probably be the max of maze_object options though.
+            # arr += [10,10,10,10] # Surrounding Square # I think 10 is an ok value... it should probably be the max of maze_object options though.
             # arr += [11,11] # self.calc_distance_to_goal()
             return arr
         else:

@@ -18,9 +18,11 @@ class ModDNN_ZMQ_Server:
             'verbose': verbose,
         }
         
+        np.random.seed(self.config['tensorflow_random_seed'])
         self.income_update_cnt = 0.0
         self.output_update_cnt = 0.0
         self.buildNetworks()
+        print "Servver setup:: ##################### ", self.nnetworks[NetworkType.World][1].get_model_weights()[0].shape
         self.ZMQ_setup()
        
     def ZMQ_setup(self):

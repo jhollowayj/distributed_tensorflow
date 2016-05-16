@@ -1,12 +1,12 @@
 import numpy as np
-from enum import Enum
+from enum import IntEnum
 
-class NetworkType(Enum):
+class NetworkType(IntEnum):
     World = 1
     Task = 2
     Agent = 3
     
-class Messages(Enum):
+class Messages(IntEnum):
     NetworkWeightsReady = 1
     RequestingNetworkWeights = 2
     # Not sure if there were any other messages to pass, but I figured I'd put this here.

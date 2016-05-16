@@ -98,7 +98,7 @@ class ModDNN_ZMQ_Client:
             network_type must be of type NetworkType enum defined in networks.py
             network_type_id isn't checked, but must be non-negative
         '''
-        print "requesting network weights...",
+        # print "requesting network weights...",
         # Error Check
         # if not isinstance(network_type, NetworkType):
         #     raise TypeError("network_type must be set to enum value of NetworkType")
@@ -116,7 +116,7 @@ class ModDNN_ZMQ_Client:
 
         # Receive Response
         response_string = server.param_rr.recv()
-        print " network weights recieved!"
+        # print " network weights recieved!"
         return Ops.decompress_weights(response_string)
 
     def handle_message(self, socket):

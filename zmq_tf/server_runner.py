@@ -14,7 +14,7 @@ parser.add_argument('--server_learning_rate', '-lr', default=1,  type=int, requi
 parser.add_argument('--tensorflow_random_seed', '-tfrs', default=54321,  type=int, required=False, help="")
 parser.add_argument('--requested_gpu_vram_percent', '-vram', default=0.01,  type=float, required=False, help="")
 parser.add_argument('--device_to_use', '-device', default=1,  type=int, required=False, help="")
-parser.add_argument('--verbose', '-verbose', default=1,  type=int, required=False, help="")
+parser.add_argument('--verbose', '-v', default=2,  type=int, required=False, help="")
 args = parser.parse_args()
 ### COMMAND LINE ARGUMENTS ###
 

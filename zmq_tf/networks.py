@@ -1,13 +1,13 @@
 import tensorflow as tf
 import numpy as np
-from enum import Enum
+from enum import IntEnum
 
-class NetworkType(Enum):
+class NetworkType(IntEnum):
     World = 1
     Task = 2
     Agent = 3
     
-class Messages(Enum):
+class Messages(IntEnum):
     NetworkWeightsReady = 1
     RequestingNetworkWeights = 2
     # Not sure if there were any other messages to pass, but I figured I'd put this here.
@@ -73,7 +73,7 @@ class Shared_Model_Object:
         # for index, lay in enumerate(self.layers):
         #     todo.append(lay.assign(weights[index]))
         # self.sess.run(todo)
-        self.sess.run([lay.assign_add(weights[index]) for index, lay in enumerate(self.layers)])
+        self.sess.run([lay.assign_add(weights[index]) for index, lay in enumerate(self.layers)]) # TODO add placeholders
                 
     def add_gradients(self, weights):
         ''' Takes in list of np.arrays containing gradients to apply (+=) to weights '''
@@ -82,7 +82,7 @@ class Shared_Model_Object:
         # for index, lay in enumerate(self.layers):
         #     todo.append(lay.assign(lay + weights[index]))
         # self.sess.run(todo)
-        self.sess.run([lay.assign_add(weights[index]) for index, lay in enumerate(self.layers)])
+        self.sess.run([lay.assign_add(weights[index]) for index, lay in enumerate(self.layers)]) # TODO add placeholders
     
     def _errorCheckIncomingWeights(self, weights):
         ''' Checks to make sure all of the shapes line up, throws error if not the same '''
@@ -104,6 +104,7 @@ class World1(Shared_Model_Object):
         # Layer 1
         self.w1 = tf.Variable(tf.random_normal([params['world_input_size'], params['world_to_task']], stddev=0.01, dtype=tf.float32), name="W1_L1_w")
         self.b1 = tf.Variable(tf.constant(0.1, shape=[params['world_to_task']], dtype=tf.float32), name="W1_L1_b")
+        # TODO add placeholders for assigning values
         self.layers = [ self.w1, self.b1 ]
 
 #####################################################################################################
@@ -114,6 +115,7 @@ class Task1(Shared_Model_Object):
         # Layer 1
         self.w1 = tf.Variable(tf.random_normal([params['world_to_task'], params['task_to_agent']], stddev=0.01, dtype=tf.float32), name="T1_L1_w")
         self.b1 = tf.Variable(tf.constant(0.1, shape=[params['world_to_task']], dtype=tf.float32), name="T1_L1_b")
+        # TODO add placeholders for assigning values
         self.layers = [ self.w1, self.b1 ]
 
 #####################################################################################################
@@ -124,6 +126,7 @@ class Agent1(Shared_Model_Object):
         # Layer 1
         self.w1 = tf.Variable(tf.random_normal([params['task_to_agent'], params['agent_1_action_space_size']], stddev=0.01, dtype=tf.float32), name="A1_L1_w")
         self.b1 = tf.Variable(tf.constant(0.1, shape=[params['agent_1_action_space_size']], dtype=tf.float32), name="A1_L1_b")
+        # TODO add placeholders for assigning values
         self.layers = [ self.w1, self.b1 ]
 #####################################################################################################
 

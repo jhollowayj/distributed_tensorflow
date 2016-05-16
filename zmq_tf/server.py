@@ -6,7 +6,7 @@ class ModDNN_ZMQ_Server:
     def __init__(self, just_one_server=True, grad_update_cnt=2,
                  serverType=NetworkType.World, server_learning_rate=1,
                  tensorflow_random_seed=54321, requested_gpu_vram_percent =(1.0/12.0),
-                 device_to_use=1, verbose=1):
+                 device_to_use=1, verbose=2):
         self.config = {
             'just_one_server': just_one_server,
             'grad_update_cnt': grad_update_cnt,
@@ -113,12 +113,13 @@ class ModDNN_ZMQ_Server:
         # Receive the request
         msg = receiving_socket.recv()
         msg_type, network_type, network_id = Ops.decompress_request(msg)
-        if self.config['verbose'] >= 1:
+        if self.config['verbose'] >= 2:
             print " responing to weight request {} {}".format(network_type, network_id)
         
         # Error check
-        if not msg_type == Messages.RequestingNetworkWeights:
-            print "Error, recieved bad request, throwing it away"
+        if not (msg_type == Messages.RequestingNetworkWeights):
+            print "Error, recieved bad request, throwing it away  ({} == {} equates to {})".format(msg_type, Messages.RequestingNetworkWeights, msg_type == Messages.RequestingNetworkWeights)
+            return 
         # TODO check netowkr_type
         # TODO check network id against network type
         # TODO TODO TODO IF there are any errors, we must notify the
@@ -140,29 +141,30 @@ class ModDNN_ZMQ_Server:
     
     def handle_incoming_gradients(self, receiving_socket):
         self.income_update_cnt += 1.0
-        if self.config['verbose'] >= 1: print " recieving incoming gradients!  (# {})".format(int(self.income_update_cnt / 3.0))
+        if self.config['verbose'] >= 2: print " recieving incoming gradients!  (# {})".format(int(self.income_update_cnt / 3.0))
 
         # Receive the request
         network_type, network_id, compressed_gradients = \
             Ops.delabel_compressed_weights(
                 receiving_socket.recv())
         gradients = Ops.decompress_weights(compressed_gradients)
-        # plus = gradients[0][0][0]
-        for g in gradients:
-            g *= self.config['server_learning_rate']
-        # cur_weights = self.nnetworks[network_type][network_id].get_model_weights()
-        # start = cur_weights[0][0][0]
-        if self.config['verbose'] >= 2:
+
+        plus, start = gradients[0][0][0], self.nnetworks[network_type][network_id].get_model_weights()[0][0][0]
+        if self.config['verbose'] >= 3:
             print "Recieved Gradient {} * {} = {}.  Adding to {}.".format(plus, self.config['server_learning_rate'], plus * self.config['server_learning_rate'], start),
 
+        for g in gradients:
+            g *= self.config['server_learning_rate']
+
         self.nnetworks[network_type][network_id].add_gradients(gradients)
-        if self.config['verbose'] >= 2:
+        if self.config['verbose'] >= 3:
             print "  Now it's {}".format(self.nnetworks[network_type][network_id].get_model_weights()[0][0][0])
         
         # Update count, publish if needed.
         self.gradientCnts[network_type][network_id] -= 1
         if self.gradientCnts[network_type][network_id] == 0:
-            print "Recieved {} gradient updates for {},{}.  Now pushing new networks!".format( self.config['grad_update_cnt'], network_type, network_id)
+            if self.config['verbose'] >= 2:
+                print "Recieved {} gradient updates for {},{}.  Now pushing new networks!".format( self.config['grad_update_cnt'], network_type, network_id)
             self.gradientCnts[network_type][network_id] = self.config['grad_update_cnt']
             self.publish_weights_available(network_type, network_id)
             
@@ -176,7 +178,7 @@ class ModDNN_ZMQ_Server:
         self.output_update_cnt += 1
         if (network_id < 0):
             raise ValueError("network_id must be non-negative")
-        if self.config['verbose'] >= 1:
+        if self.config['verbose'] >= 2:
             print "=== ANNOUNCING NETWORK WEIGHT {},{} (# {}): {}".format(network_type, network_id, int(self.output_update_cnt), self.nnetworks[network_type][network_id].get_model_weights()[0][0][0])
 
         # Publish a message saying the weights are available! 

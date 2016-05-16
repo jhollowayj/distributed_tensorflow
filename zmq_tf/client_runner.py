@@ -20,7 +20,7 @@ parser.add_argument('--num_episodes', '-ne', default=10000,  type=int, required=
 parser.add_argument('--annealing_size', '-an', default=100,  type=int, required=False, help="")
 parser.add_argument('--epsilon', '-e', default=0.04,  type=float, required=False, help="")
 parser.add_argument('--observer', '-o', default=False,  type=bool, required=False, help="")
-# NEURAL-NET            # Discount Factor, Learning Rate, etc. TODO
+# NEURAL-NET       #Discount Factor, Learning Rate, etc. TODO
 parser.add_argument('--allow_local_nn_weight_updates', '-nnu', default=False,  type=bool, required=False, help="")
 parser.add_argument('--requested_gpu_vram_percent', '-vram', default=0.01,  type=float, required=False, help="")
 parser.add_argument('--device_to_use', '-device', default=1,  type=int, required=False, help="")
@@ -28,7 +28,7 @@ parser.add_argument('--device_to_use', '-device', default=1,  type=int, required
 parser.add_argument('--max_steps_per_episode', '-msteps', default=200,  type=int, required=False, help="")
 parser.add_argument('--write_csv', default=False,  type=bool, required=False, help="")
 parser.add_argument('--csv_filename', default="tmp_res.csv",  type=bool, required=False, help="")
-parser.add_argument('--verbose', '-v', default=1,  type=int, required=False, help="")
+parser.add_argument('--verbose', '-v', default=0,  type=int, required=False, help="")
 # CLIENT-SERVER
 parser.add_argument('--gradients_until_send', '-grads', default=1,  type=int, required=False, help="")
 parser.add_argument('--ignore_server', '-is', default=False,  type=bool, required=False, help="")

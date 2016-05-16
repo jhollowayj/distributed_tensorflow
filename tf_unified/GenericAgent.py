@@ -16,7 +16,7 @@ class Agent:
         self.i = 1
         self.save_freq = save_freq
         self.iterations = 0
-        self.annealing_size = int(annealing_size * 100) # number of steps, not number of games 
+        self.annealing_size = annealing_size
         self.just_greedy = just_greedy
         self.input_scaling_vector = input_scaling_vector
 
@@ -79,10 +79,13 @@ class Agent:
         self.rewards.append(reward)
         return self.iterate()
 
+    def is_using_experience_replay(self):
+        return False
+        
     def iterate(self):
         self.iterations += 1
 
-        S = self.states
+        S = self.states # If you change this to use an experienceReplay, please set the flag accordingly for is_using_experience_replay()
         NS= S[1:] + [None]
         A = [self.onehot(act) for act in self.actions]
         R = self.rewards

@@ -65,24 +65,21 @@ class Shared_Model_Object:
         ''' Returns list of np.arrays containing the weights '''
         # return [l.eval(self.sess) for l in self.layers]
         return self.sess.run(self.layers)
-        
+
+    def savable_vars(self):
+        return self.layers
+
     def set_model_weights(self, weights):
         ''' Takes in list of np.arrays containing the new weights to use '''
         self._errorCheckIncomingWeights(weights)
-        # todo = []
-        # for index, lay in enumerate(self.layers):
-        #     todo.append(lay.assign(weights[index]))
-        # self.sess.run(todo)
-        self.sess.run([lay.assign_add(weights[index]) for index, lay in enumerate(self.layers)]) # TODO add placeholders
+        self.sess.run(self.assigns, feed_dict={self.assigns_placeholders[i]:weights[i] for i in range(len(weights))})
                 
     def add_gradients(self, weights):
         ''' Takes in list of np.arrays containing gradients to apply (+=) to weights '''
         self._errorCheckIncomingWeights(weights)
-        # todo = []
-        # for index, lay in enumerate(self.layers):
-        #     todo.append(lay.assign(lay + weights[index]))
-        # self.sess.run(todo)
-        self.sess.run([lay.assign_add(weights[index]) for index, lay in enumerate(self.layers)]) # TODO add placeholders
+        self.sess.run(self.assign_adds, feed_dict={self.assigns_placeholders[i]:weights[i] for i in range(len(weights))})
+
+        # self.sess.run([lay.assign_add(weights[index]) for index, lay in enumerate(self.layers)]) # TODO add placeholders
     
     def _errorCheckIncomingWeights(self, weights):
         ''' Checks to make sure all of the shapes line up, throws error if not the same '''
@@ -104,8 +101,17 @@ class World1(Shared_Model_Object):
         # Layer 1
         self.w1 = tf.Variable(tf.random_normal([params['world_input_size'], params['world_to_task']], stddev=0.01, dtype=tf.float32), name="W1_L1_w")
         self.b1 = tf.Variable(tf.constant(0.1, shape=[params['world_to_task']], dtype=tf.float32), name="W1_L1_b")
-        # TODO add placeholders for assigning values
+        self.assign_w1_placeholder = tf.placeholder(tf.float32, shape=[params['world_input_size'], params['world_to_task']])
+        self.assign_b1_placeholder = tf.placeholder(tf.float32, shape=[params['world_to_task']])
+        self.assign_w1 = self.w1.assign(self.assign_w1_placeholder)
+        self.assign_b1 = self.b1.assign(self.assign_b1_placeholder)
+        self.assign_add_w1 = self.w1.assign_add(self.assign_w1_placeholder)
+        self.assign_add_b1 = self.b1.assign_add(self.assign_b1_placeholder)
+        # outside vars
         self.layers = [ self.w1, self.b1 ]
+        self.assigns = [self.assign_w1, self.assign_b1]
+        self.assign_adds = [self.assign_add_w1, self.assign_add_b1]
+        self.assigns_placeholders = [self.assign_w1_placeholder, self.assign_b1_placeholder]
 
 #####################################################################################################
 class Task1(Shared_Model_Object):
@@ -114,9 +120,18 @@ class Task1(Shared_Model_Object):
         self.sess = sess
         # Layer 1
         self.w1 = tf.Variable(tf.random_normal([params['world_to_task'], params['task_to_agent']], stddev=0.01, dtype=tf.float32), name="T1_L1_w")
-        self.b1 = tf.Variable(tf.constant(0.1, shape=[params['world_to_task']], dtype=tf.float32), name="T1_L1_b")
-        # TODO add placeholders for assigning values
+        self.b1 = tf.Variable(tf.constant(0.1, shape=[params['task_to_agent']], dtype=tf.float32), name="T1_L1_b")
+        self.assign_w1_placeholder = tf.placeholder(tf.float32, shape=[params['world_to_task'], params['task_to_agent']])
+        self.assign_b1_placeholder = tf.placeholder(tf.float32, shape=[params['task_to_agent']])
+        self.assign_w1 = self.w1.assign(self.assign_w1_placeholder)
+        self.assign_b1 = self.b1.assign(self.assign_b1_placeholder)
+        self.assign_add_w1 = self.w1.assign_add(self.assign_w1_placeholder)
+        self.assign_add_b1 = self.b1.assign_add(self.assign_b1_placeholder)
+        # outside vars
         self.layers = [ self.w1, self.b1 ]
+        self.assigns = [self.assign_w1, self.assign_b1]
+        self.assign_adds = [self.assign_add_w1, self.assign_add_b1]
+        self.assigns_placeholders = [self.assign_w1_placeholder, self.assign_b1_placeholder]
 
 #####################################################################################################
 class Agent1(Shared_Model_Object):
@@ -126,8 +141,18 @@ class Agent1(Shared_Model_Object):
         # Layer 1
         self.w1 = tf.Variable(tf.random_normal([params['task_to_agent'], params['agent_1_action_space_size']], stddev=0.01, dtype=tf.float32), name="A1_L1_w")
         self.b1 = tf.Variable(tf.constant(0.1, shape=[params['agent_1_action_space_size']], dtype=tf.float32), name="A1_L1_b")
-        # TODO add placeholders for assigning values
+        #assigning stuff
+        self.assign_w1_placeholder = tf.placeholder(tf.float32, shape=[params['task_to_agent'], params['agent_1_action_space_size']])
+        self.assign_b1_placeholder = tf.placeholder(tf.float32, shape=[params['agent_1_action_space_size']])
+        self.assign_w1 = self.w1.assign(self.assign_w1_placeholder)
+        self.assign_b1 = self.b1.assign(self.assign_b1_placeholder)
+        self.assign_add_w1 = self.w1.assign_add(self.assign_w1_placeholder)
+        self.assign_add_b1 = self.b1.assign_add(self.assign_b1_placeholder)
+        # outside vars
         self.layers = [ self.w1, self.b1 ]
+        self.assigns = [self.assign_w1, self.assign_b1]
+        self.assign_adds = [self.assign_add_w1, self.assign_add_b1]
+        self.assigns_placeholders = [self.assign_w1_placeholder, self.assign_b1_placeholder]
 #####################################################################################################
 
 debugging = False

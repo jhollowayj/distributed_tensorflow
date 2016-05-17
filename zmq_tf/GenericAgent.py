@@ -17,7 +17,7 @@ class Agent:
         self.i = 1
         self.save_freq = save_freq
         self.iterations = 0
-        self.annealing_size = annealing_size * 100 # number of steps, not number of games 
+        self.annealing_size = annealing_size # number of steps, not number of games 
         self.just_greedy = just_greedy
         self.input_scaling_vector = input_scaling_vector
         self.allow_local_nn_weight_updates = allow_local_nn_weight_updates

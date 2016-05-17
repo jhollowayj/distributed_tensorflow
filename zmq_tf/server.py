@@ -1,12 +1,12 @@
-import zmq, time, numpy as np, os
-import networks_np as networks, Ops
-from networks_np import NetworkType, Messages
+import zmq, time, numpy as np, tensorflow as tf
+import networks as networks, Ops
+from networks import NetworkType, Messages
 
 class ModDNN_ZMQ_Server:
     def __init__(self, just_one_server=True, grad_update_cnt=2,
                  serverType=NetworkType.World, server_learning_rate=1,
                  tensorflow_random_seed=54321, requested_gpu_vram_percent =(1.0/12.0),
-                 device_to_use=1, verbose=2):
+                 device_to_use=1, verbose=2, weights_ckpt_file="/tmp/model.ckpt"):
         self.config = {
             'just_one_server': just_one_server,
             'grad_update_cnt': grad_update_cnt,
@@ -16,6 +16,7 @@ class ModDNN_ZMQ_Server:
             'requested_gpu_vram_percent': requested_gpu_vram_percent,
             'device_to_use': device_to_use,
             'verbose': verbose,
+            'weights_ckpt_file': weights_ckpt_file,
         }
         
         np.random.seed(self.config['tensorflow_random_seed'])
@@ -24,6 +25,8 @@ class ModDNN_ZMQ_Server:
         self.buildNetworks()
         print "Servver setup:: ##################### ", self.nnetworks[NetworkType.World][1].get_model_weights()[0].shape
         self.ZMQ_setup()
+
+###############################################################################
        
     def ZMQ_setup(self):
         self.context = zmq.Context()
@@ -47,37 +50,61 @@ class ModDNN_ZMQ_Server:
         self.poller.register( self.grad_recv, zmq.POLLIN )
 
     def buildNetworks(self):
+        device2use = {-1: "/cpu:0", 0: "/gpu:0", 1: "/gpu:1"}[self.config['device_to_use']]
+        with tf.device(device2use):
+            if self.config['device_to_use'] == -1:
+                self.sess = tf.Session()
+            else:
+                gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=self.config['requested_gpu_vram_percent'],
+                                            allow_growth=True, deferred_deletion_bytes=1)
+                self.sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+
+        self.savable_variables = []
+        
         self.nnetworks = {}
         self.gradientCnts = {}
-        self.nnetworks[NetworkType.World] = None
-        self.nnetworks[NetworkType.Task]  = None
-        self.nnetworks[NetworkType.Agent] = None
-        self.gradientCnts[NetworkType.World] = None
-        self.gradientCnts[NetworkType.Task]  = None
-        self.gradientCnts[NetworkType.Agent] = None
-
+        self.nnetworks[NetworkType.World], self.nnetworks[NetworkType.Task], self.nnetworks[NetworkType.Agent] = None, None, None
+        self.gradientCnts[NetworkType.World], self.gradientCnts[NetworkType.Task], self.gradientCnts[NetworkType.Agent] = None, None, None
+        
         if self.config['just_one_server']:
-            self.build_NN_worlds()
-            self.build_NN_tasks()
-            self.build_NN_agents()
+            self.build_NN_worlds(), self.build_NN_tasks(), self.build_NN_agents()
         else:
-            if self.config['serverType'] == NetworkType.World:
-                self.build_NN_worlds()
-            elif self.config['serverType'] == NetworkType.Task:
-                self.build_NN_tasks()
-            elif self.config['serverType'] == NetworkType.Agent:
-                self.build_NN_agents()
-            else:
-                raise Error("Ran out of types on the server")
+            if   self.config['serverType'] == NetworkType.World: self.build_NN_worlds()
+            elif self.config['serverType'] == NetworkType.Task:  self.build_NN_tasks()
+            elif self.config['serverType'] == NetworkType.Agent: self.build_NN_agents()
+            else: raise Error("Ran out of types on the server")
+
+        self.sess.run(tf.initialize_all_variables())
+        self.saver = tf.train.Saver()
+        tf.get_default_graph().finalize() # TODO see if we can still save/load weights with this here...
         if self.config['verbose'] >= 1:
             print "Initializing _all _variables on server"
+
+###############################################################################
+    # TODO make sure this doesn't break when we switch to use separate servers... if we ever get that far.
+    def save_weights(self):
+        save_path = saver.save(self.savable_variables, self.config['weights_ckpt_file'])
+        if self.config['verbose'] >= 1:
+            print("Model saved in file: %s" % save_path)
+
+    def load_weights(self):
+        saver.restore(self.savable_variables, self.config['weights_ckpt_file'])
+        print("Model restored.")
+
+###############################################################################
+###############################################################################
+###############################################################################
 
     def build_NN_worlds(self):
         if self.config['verbose'] >= 1: print "building worlds"
         self.nnetworks[NetworkType.World] = {}
-        self.nnetworks[NetworkType.World][1] = networks.World1()
-        # self.nnetworks[NetworkType.World][2] = networks.World2()
-        # self.nnetworks[NetworkType.World][3] = networks.World3()
+        self.nnetworks[NetworkType.World][1] = networks.World1(self.sess)
+        # self.nnetworks[NetworkType.World][2] = networks.World2(self.sess)
+        # self.nnetworks[NetworkType.World][3] = networks.World3(self.sess)
+
+        self.savable_variables += self.nnetworks[NetworkType.World][1].savable_vars()
+        # self.savable_variables += self.nnetworks[NetworkType.World][2].savable_vars()
+        # self.savable_variables += self.nnetworks[NetworkType.World][3].savable_vars()
 
         self.gradientCnts[NetworkType.World] = {}
         self.gradientCnts[NetworkType.World][1] = self.config['grad_update_cnt']
@@ -87,9 +114,13 @@ class ModDNN_ZMQ_Server:
     def build_NN_tasks(self):
         if self.config['verbose'] >= 1: print "building tasks"
         self.nnetworks[NetworkType.Task] = {}
-        self.nnetworks[NetworkType.Task][1] = networks.Task1()
-        # self.nnetworks[NetworkType.Task][2] = networks.Task2()
-        # self.nnetworks[NetworkType.Task][3] = networks.Task3()
+        self.nnetworks[NetworkType.Task][1] = networks.Task1(self.sess)
+        # self.nnetworks[NetworkType.Task][2] = networks.Task2(self.sess)
+        # self.nnetworks[NetworkType.Task][3] = networks.Task3(self.sess)
+
+        self.savable_variables += self.nnetworks[NetworkType.Task][1].savable_vars()
+        # self.savable_variables += self.nnetworks[NetworkType.Task][2].savable_vars()
+        # self.savable_variables += self.nnetworks[NetworkType.Task][3].savable_vars()
 
         self.gradientCnts[NetworkType.Task] = {}
         self.gradientCnts[NetworkType.Task][1] = self.config['grad_update_cnt']
@@ -99,16 +130,25 @@ class ModDNN_ZMQ_Server:
     def build_NN_agents(self):
         if self.config['verbose'] >= 1: print "building agents"
         self.nnetworks[NetworkType.Agent] = {}
-        self.nnetworks[NetworkType.Agent][1] = networks.Agent1()
-        # self.nnetworks[NetworkType.Agent][2] = networks.Agent2()
-        # self.nnetworks[NetworkType.Agent][3] = networks.Agent3()
+        self.nnetworks[NetworkType.Agent][1] = networks.Agent1(self.sess)
+        # self.nnetworks[NetworkType.Agent][2] = networks.Agent2(self.sess)
+        # self.nnetworks[NetworkType.Agent][3] = networks.Agent3(self.sess)
+
+        self.savable_variables += self.nnetworks[NetworkType.Agent][1].savable_vars()
+        # self.savable_variables += self.nnetworks[NetworkType.Agent][2].savable_vars()
+        # self.savable_variables += self.nnetworks[NetworkType.Agent][3].savable_vars()
 
         self.gradientCnts[NetworkType.Agent] = {}
         self.gradientCnts[NetworkType.Agent][1] = self.config['grad_update_cnt']
         # self.gradientCnts[NetworkType.Agent][2] = self.config['grad_update_cnt']
         # self.gradientCnts[NetworkType.Agent][3] = self.config['grad_update_cnt']
-        
-    
+
+###############################################################################
+###############################################################################
+###############################################################################
+###############################################################################
+###############################################################################
+
     def handle_weight_request(self, receiving_socket):
         # Receive the request
         msg = receiving_socket.recv()
@@ -170,7 +210,7 @@ class ModDNN_ZMQ_Server:
             
         # TODO Maybe send a response saying it went through, or it failed???
     
-    
+
     def publish_weights_available(self, network_type, network_id):
         # Error check
         # if not isinstance(network_type, NetworkType):

@@ -1,0 +1,35 @@
+Code:
+    Server:
+        ---Check tf.save/load on server---
+        ---Implement flag to reset/wipe ckpts--- Just use false, and it will overwrite it.
+    Agent:
+        --Add sql to agent--
+        --Add is_eval true--
+    General:
+        Script to start new learners (x slaves, 1 master w/ is_eval true
+    Reporting:
+        ---Mostly Done by Robert:---
+            redash: Sql script, (x=time, y = reward, series=codename where codename != "")
+            redash: Sql script, (x=time, y = movAvg(x10, did_win) where codename != "" and is_eval)
+
+
+Experiments:
+Server:
+
+1 agent  learning | same game (solo)
+    python client_runner.py -is -sql --codename "singleagent.singlegame.noserver"
+1 agent  learning | same game (using server)
+n agents learning | same game
+    python client_runner.py -grads 5 ### (n-1) times 
+    python client_runner.py -grads 5 --codename "{n}Agents.singlegame.withserver" -sql -eval
+
+2 agents learning | 2 games x 1 agent  each
+    python client_runner.py -grads 5 --codename "2TotalAgents_1Agents_game:1.1.1" -aid 1 # NESW
+    python client_runner.py -grads 5 --codename "2TotalAgents_1Agents_game:1.1.2" -aid 2 # ESWN
+6 agents learning | 2 games x 3 agents each
+    python client_runner.py -grads 10 --codename "6TotalAgents_3Agents_game:1.1.1" -aid 1 # NESW X3
+    python client_runner.py -grads 10 --codename "6TotalAgents_3Agents_game:1.1.2" -aid 2 # ESWN X3
+9 agents learning | 9 games x 3 agents each
+    python client_runner.py -grads 15 --codename "9TotalAgents_3Agents_game:1.1.1" -aid 1 # NESW X3
+    python client_runner.py -grads 15 --codename "9TotalAgents_3Agents_game:1.1.2" -aid 2 # ESWN X3
+    python client_runner.py -grads 15 --codename "9TotalAgents_3Agents_game:1.1.3" -aid 3 # SWNE X3

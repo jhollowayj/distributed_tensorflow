@@ -1,7 +1,7 @@
 import zmq
+import uuid
 import Ops
 from networks import NetworkType, Messages
-
 class Object(object):
     pass
     
@@ -23,6 +23,8 @@ class ModDNN_ZMQ_Client:
             NetworkType.Task : self.task_id,
             NetworkType.Agent: self.agent_id,
         }
+        self.callback_weights_available = None
+
         
     def ZMQ_setup(self, config):
         self.context = zmq.Context()
@@ -91,8 +93,12 @@ class ModDNN_ZMQ_Client:
                 network_type, self.network_id_lookup[network_type], compressedWeights)
         server.grad_send.send(msg)
         
-    callback_weights_available = None
-    
+    def request_server_uuid(self):
+        # TODO figure out how to handle multiple servers with their uuid...
+        server = self.servers[NetworkType.World]
+        server.param_rr.send(Ops.compress_request(Messages.RequestingServerUUID, -1, -1))
+        return uuid.UUID(bytes=server.param_rr.recv())
+        
     def requestNetworkWeights(self, network_type = NetworkType.World):
         ''' Request network Weights
             network_type must be of type NetworkType enum defined in networks.py
@@ -130,8 +136,6 @@ class ModDNN_ZMQ_Client:
             else:
                 self.callback_weights_available(network_type, network_id)
         
-        
-
     def setWeightsAvailableCallback(self, cb):
         ''' Set function to call for when ZMQ gets a message of available weights
             Simulators should use this to know they can request updated weights (i.e. requestNetworkWeights)

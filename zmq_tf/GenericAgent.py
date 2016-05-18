@@ -52,16 +52,20 @@ class Agent:
     def end_episode(self):
         pass
 
+    def set_evaluate_flag(self, flag):
+        self.is_eval = flag
+
     def calculate_epsilon(self):
-        if self.just_greedy:
-            return self.epsilon
+        epsilon = None
+        if self.is_eval:
+            epsilon = 0
+        elif self.just_greedy:
+            epsilon = self.epsilon
         else:
-            repeat_random_periodically = False
-            if repeat_random_periodically:
-                iterationCnt = (self.iterations) % (self.annealing_size*4.5)
-            else:
-                iterationCnt = self.iterations
-            return max(self.epsilon, 1-(float(iterationCnt) / self.annealing_size))
+            epsilon = max(self.epsilon, 1-float(self.iterations) / self.annealing_size)
+            # epsilon = max(self.epsilon, 1-float(self.iterations % (self.annealing_size*4.5)) / self.annealing_size)
+        return epsilon
+
     def select_action(self, state, append=True):
         if self.input_scaling_vector is not None:
             # Scale the input to be between 0 and 1.  # Supposed to help with exploding gradients
@@ -88,6 +92,9 @@ class Agent:
     def train(self, reward):
         self.rewards.append(reward)
         return self.iterate()
+
+    def is_using_experience_replay(self):
+        return False
 
     def iterate(self):
         self.iterations += 1

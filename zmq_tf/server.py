@@ -1,15 +1,21 @@
-import zmq, time, numpy as np, tensorflow as tf
+import zmq
+import time
+import numpy as np
+import tensorflow as tf
+import statistics
 import networks as networks, Ops
 from networks import NetworkType, Messages
 
 class ModDNN_ZMQ_Server:
-    def __init__(self, just_one_server=True, grad_update_cnt=2,
-                 serverType=NetworkType.World, server_learning_rate=1,
-                 tensorflow_random_seed=54321, requested_gpu_vram_percent =(1.0/12.0),
-                 device_to_use=1, verbose=2, weights_ckpt_file="/tmp/model.ckpt"):
+    def __init__(self, just_one_server=True, serverType=NetworkType.World,
+                 server_learning_rate=1, grad_update_cnt_before_send=2, 
+                 tensorflow_random_seed=54321, requested_gpu_vram_percent =(1.0/12.0), device_to_use=1,
+                 verbose=2, 
+                 ckpt_save_interval=50, weights_ckpt_file="/tmp/model.ckpt", load_ckpt_file_on_start=False,
+                 server_codename = ""):
         self.config = {
             'just_one_server': just_one_server,
-            'grad_update_cnt': grad_update_cnt,
+            'grad_update_cnt_before_send': grad_update_cnt_before_send,
             'serverType': serverType,
             'server_learning_rate': server_learning_rate,
             'tensorflow_random_seed': tensorflow_random_seed,
@@ -17,14 +23,17 @@ class ModDNN_ZMQ_Server:
             'device_to_use': device_to_use,
             'verbose': verbose,
             'weights_ckpt_file': weights_ckpt_file,
+            'ckpt_save_interval': ckpt_save_interval,
+            'load_ckpt_file_on_start': load_ckpt_file_on_start,
         }
         
         np.random.seed(self.config['tensorflow_random_seed'])
-        self.income_update_cnt = 0.0
-        self.output_update_cnt = 0.0
+        self.weight_update_cnt = 0.0
+        self.client_announce_cnt = 0.0
         self.buildNetworks()
         print "Servver setup:: ##################### ", self.nnetworks[NetworkType.World][1].get_model_weights()[0].shape
         self.ZMQ_setup()
+        self.server_uuid = statistics.get_new_uuid()
 
 ###############################################################################
        
@@ -77,18 +86,26 @@ class ModDNN_ZMQ_Server:
         self.sess.run(tf.initialize_all_variables())
         self.saver = tf.train.Saver()
         tf.get_default_graph().finalize() # TODO see if we can still save/load weights with this here...
+        
+        print "\nblah\n{}\n".format(self.config['load_ckpt_file_on_start'])
+        if self.config['load_ckpt_file_on_start']:
+            self.load_weights()
+    
         if self.config['verbose'] >= 1:
             print "Initializing _all _variables on server"
 
 ###############################################################################
     # TODO make sure this doesn't break when we switch to use separate servers... if we ever get that far.
     def save_weights(self):
-        save_path = saver.save(self.savable_variables, self.config['weights_ckpt_file'])
+        save_path = self.saver.save(self.sess, self.config['weights_ckpt_file'])
+        # save_path = self.saver.save(self.savable_variables, self.config['weights_ckpt_file'])
         if self.config['verbose'] >= 1:
             print("Model saved in file: %s" % save_path)
 
     def load_weights(self):
-        saver.restore(self.savable_variables, self.config['weights_ckpt_file'])
+        print("attempting to load the weights")
+        self.saver.restore(self.sess, self.config['weights_ckpt_file'])
+        # self.saver.restore(self.savable_variables, self.config['weights_ckpt_file'])
         print("Model restored.")
 
 ###############################################################################
@@ -107,9 +124,9 @@ class ModDNN_ZMQ_Server:
         # self.savable_variables += self.nnetworks[NetworkType.World][3].savable_vars()
 
         self.gradientCnts[NetworkType.World] = {}
-        self.gradientCnts[NetworkType.World][1] = self.config['grad_update_cnt']
-        # self.gradientCnts[NetworkType.World][2] = self.config['grad_update_cnt']
-        # self.gradientCnts[NetworkType.World][3] = self.config['grad_update_cnt']
+        self.gradientCnts[NetworkType.World][1] = self.config['grad_update_cnt_before_send']
+        # self.gradientCnts[NetworkType.World][2] = self.config['grad_update_cnt_before_send']
+        # self.gradientCnts[NetworkType.World][3] = self.config['grad_update_cnt_before_send']
         
     def build_NN_tasks(self):
         if self.config['verbose'] >= 1: print "building tasks"
@@ -123,25 +140,25 @@ class ModDNN_ZMQ_Server:
         # self.savable_variables += self.nnetworks[NetworkType.Task][3].savable_vars()
 
         self.gradientCnts[NetworkType.Task] = {}
-        self.gradientCnts[NetworkType.Task][1] = self.config['grad_update_cnt']
-        # self.gradientCnts[NetworkType.Task][2] = self.config['grad_update_cnt']
-        # self.gradientCnts[NetworkType.Task][3] = self.config['grad_update_cnt']
+        self.gradientCnts[NetworkType.Task][1] = self.config['grad_update_cnt_before_send']
+        # self.gradientCnts[NetworkType.Task][2] = self.config['grad_update_cnt_before_send']
+        # self.gradientCnts[NetworkType.Task][3] = self.config['grad_update_cnt_before_send']
     
     def build_NN_agents(self):
         if self.config['verbose'] >= 1: print "building agents"
         self.nnetworks[NetworkType.Agent] = {}
         self.nnetworks[NetworkType.Agent][1] = networks.Agent1(self.sess)
-        # self.nnetworks[NetworkType.Agent][2] = networks.Agent2(self.sess)
+        self.nnetworks[NetworkType.Agent][2] = networks.Agent2(self.sess)
         # self.nnetworks[NetworkType.Agent][3] = networks.Agent3(self.sess)
 
         self.savable_variables += self.nnetworks[NetworkType.Agent][1].savable_vars()
-        # self.savable_variables += self.nnetworks[NetworkType.Agent][2].savable_vars()
+        self.savable_variables += self.nnetworks[NetworkType.Agent][2].savable_vars()
         # self.savable_variables += self.nnetworks[NetworkType.Agent][3].savable_vars()
 
         self.gradientCnts[NetworkType.Agent] = {}
-        self.gradientCnts[NetworkType.Agent][1] = self.config['grad_update_cnt']
-        # self.gradientCnts[NetworkType.Agent][2] = self.config['grad_update_cnt']
-        # self.gradientCnts[NetworkType.Agent][3] = self.config['grad_update_cnt']
+        self.gradientCnts[NetworkType.Agent][1] = self.config['grad_update_cnt_before_send']
+        self.gradientCnts[NetworkType.Agent][2] = self.config['grad_update_cnt_before_send']
+        # self.gradientCnts[NetworkType.Agent][3] = self.config['grad_update_cnt_before_send']
 
 ###############################################################################
 ###############################################################################
@@ -149,39 +166,40 @@ class ModDNN_ZMQ_Server:
 ###############################################################################
 ###############################################################################
 
-    def handle_weight_request(self, receiving_socket):
+    def handle_client_request(self, receiving_socket):
         # Receive the request
         msg = receiving_socket.recv()
         msg_type, network_type, network_id = Ops.decompress_request(msg)
-        if self.config['verbose'] >= 2:
-            print " responing to weight request {} {}".format(network_type, network_id)
         
-        # Error check
-        if not (msg_type == Messages.RequestingNetworkWeights):
+        if msg_type == Messages.RequestingNetworkWeights:
+            self.send_weights_to_client(network_type, network_id, receiving_socket)
+        elif msg_type == Messages.RequestingServerUUID:
+            self.send_server_uuid(receiving_socket)
+        else:
             print "Error, recieved bad request, throwing it away  ({} == {} equates to {})".format(msg_type, Messages.RequestingNetworkWeights, msg_type == Messages.RequestingNetworkWeights)
             return 
-        # TODO check netowkr_type
-        # TODO check network id against network type
-        # TODO TODO TODO IF there are any errors, we must notify the
-        # # client and allow them to fail gracefully.  (Ideally, 
-        # # this shouldn't be a problem as we are all among friends
-        # # here, but you know how it goes...)
+    def send_server_uuid(self, receiving_socket):
+        receiving_socket.send(self.server_uuid.bytes)
+        
+    def send_weights_to_client(self, network_type, network_id, receiving_socket):
+        if self.config['verbose'] >= 2:
+            print "+++ responing to client request for weights {} {}".format(network_type, network_id)
+
+        # TODO check { netowkr_type, network id against network type }
+        # TODO TODO TODO IF there are any errors, we must notify the client and allow them to fail gracefully.  (Ideally, this shouldn't be a problem as we are all among friends here, but you know how it goes...)
         
         # Send the requested weights
         weights = self.nnetworks[network_type][network_id].get_model_weights()
-        # for w in weights:
-        #     print w.shape
-        # print weights
         
-        ## Debugging
-        ## if network_type == 1 and network_id == 1:
-        ##     print "============ 1,1[0][0][0]: ", weights[0][0][0] 
+        ## Debugging ## if network_type == 1 and network_id == 1: print "============ 1,1[0][0][0]: ", weights[0][0][0] 
         receiving_socket.send(
             Ops.compress_weights( weights ) )
     
+    
     def handle_incoming_gradients(self, receiving_socket):
-        self.income_update_cnt += 1.0
-        if self.config['verbose'] >= 2: print " recieving incoming gradients!  (# {})".format(int(self.income_update_cnt / 3.0))
+        # Update the weight_update_cnt
+        self.weight_update_cnt += 1.0
+        if self.config['verbose'] >= 2: print "### recieving incoming gradients!  (# {})".format(int(self.weight_update_cnt / 3.0)),
 
         # Receive the request
         network_type, network_id, compressed_gradients = \
@@ -191,23 +209,28 @@ class ModDNN_ZMQ_Server:
 
         plus, start = gradients[0][0][0], self.nnetworks[network_type][network_id].get_model_weights()[0][0][0]
         if self.config['verbose'] >= 3:
-            print "Recieved Gradient {} * {} = {}.  Adding to {}.".format(plus, self.config['server_learning_rate'], plus * self.config['server_learning_rate'], start),
+            print "||| Recieved Gradient ({}.{}) {} * {} = {}.  Adding to {}.".format(network_type, network_id, plus, self.config['server_learning_rate'], plus * self.config['server_learning_rate'], start),
 
         for g in gradients:
             g *= self.config['server_learning_rate']
 
         self.nnetworks[network_type][network_id].add_gradients(gradients)
         if self.config['verbose'] >= 3:
-            print "  Now it's {}".format(self.nnetworks[network_type][network_id].get_model_weights()[0][0][0])
+            print "  Now it's {}".format(self.nnetworks[network_type][network_id].get_model_weights()[0][0][0]),
+        if self.config['verbose'] >= 2: print
+
+        # Save new weights if needed...
+        if self.weight_update_cnt % self.config['ckpt_save_interval'] == 0:
+            self.save_weights()
         
         # Update count, publish if needed.
         self.gradientCnts[network_type][network_id] -= 1
         if self.gradientCnts[network_type][network_id] == 0:
             if self.config['verbose'] >= 2:
-                print "Recieved {} gradient updates for {},{}.  Now pushing new networks!".format( self.config['grad_update_cnt'], network_type, network_id)
-            self.gradientCnts[network_type][network_id] = self.config['grad_update_cnt']
+                print "___ Recieved {} gradient updates for {},{}.  Now pushing new networks!".format( self.config['grad_update_cnt_before_send'], network_type, network_id)
+            self.gradientCnts[network_type][network_id] = self.config['grad_update_cnt_before_send']
             self.publish_weights_available(network_type, network_id)
-            
+        
         # TODO Maybe send a response saying it went through, or it failed???
     
 
@@ -215,11 +238,11 @@ class ModDNN_ZMQ_Server:
         # Error check
         # if not isinstance(network_type, NetworkType):
         #     raise TypeError("network_type must be set to enum value of NetworkType")
-        self.output_update_cnt += 1
+        self.client_announce_cnt += 1
         if (network_id < 0):
             raise ValueError("network_id must be non-negative")
         if self.config['verbose'] >= 2:
-            print "=== ANNOUNCING NETWORK WEIGHT {},{} (# {}): {}".format(network_type, network_id, int(self.output_update_cnt), self.nnetworks[network_type][network_id].get_model_weights()[0][0][0])
+            print "=== ANNOUNCING NETWORK WEIGHT {},{} (# {}): {}".format(network_type, network_id, int(self.client_announce_cnt), self.nnetworks[network_type][network_id].get_model_weights()[0][0][0])
 
         # Publish a message saying the weights are available! 
         self.message_bcast.send(Ops.compress_msg(Messages.NetworkWeightsReady, network_type, network_id))
@@ -229,7 +252,7 @@ class ModDNN_ZMQ_Server:
         socks = dict( self.poller.poll( 500 ) )
         # print "server Polling results: {}".format(socks)
         if self.param_rr in socks:
-            self.handle_weight_request(self.param_rr)
+            self.handle_client_request(self.param_rr)
         elif self.grad_recv in socks:
             self.handle_incoming_gradients(self.grad_recv)
         
@@ -254,7 +277,7 @@ class ModDNN_ZMQ_Server:
             socks = dict( self.poller.poll( 500 ) )
             if self.param_rr in socks:
                 print "handling network weight request"
-                self.handle_weight_request(self.param_rr)
+                self.handle_client_request(self.param_rr)
             if self.grad_recv in socks:
                 self.handle_incoming_gradients(self.grad_recv)
 

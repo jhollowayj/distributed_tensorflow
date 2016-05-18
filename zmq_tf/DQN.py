@@ -146,15 +146,11 @@ class DQN:
         for grad in grads:              # We only want the gradient average, not the giant number
             grad /= num_grads_summed    #(should also help with exploding gradients)
         ### End: Average the gradients now ###
-        # if self.params['verbose'] >= 1:
-        print "Returning grads[0][0][0] of {} / {} = {}".format(start, num_grads_summed, grads[0][0][0])
+        if self.params['verbose'] >= 1:
+            print "Returning grads[0][0][0] of {} / {} = {}".format(start, num_grads_summed, grads[0][0][0])
         return grads
 
     def train(self,bat_s,bat_a,bat_t,bat_n,bat_r):
-        # return self._train_split(bat_s,bat_a,bat_t,bat_n,bat_r)
-        return self._train_single(bat_s,bat_a,bat_t,bat_n,bat_r)
-   
-    def _train_single(self,bat_s,bat_a,bat_t,bat_n,bat_r):
         '''Please note: This allows the networks to change their weights!'''
         feed_dict={self.x: bat_s, self.q_t: np.zeros(bat_n.shape[0]), self.actions: bat_a, self.terminals:bat_t, self.rewards: bat_r}
         q_t = np.amax( self.sess.run(self.y,feed_dict=feed_dict) ,axis=1)
@@ -165,7 +161,8 @@ class DQN:
         ends = self.sess.run(self.all_layers)
         
         self.stash_gradients([ends[i] - starts[i] for i in range(len(starts))])
-        self.set_all_weights(starts)
+        if not self.params['allow_local_nn_weight_updates']:
+            self.set_all_weights(starts)
 
         return costs
         

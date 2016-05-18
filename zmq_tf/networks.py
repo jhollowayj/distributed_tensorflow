@@ -10,13 +10,15 @@ class NetworkType(IntEnum):
 class Messages(IntEnum):
     NetworkWeightsReady = 1
     RequestingNetworkWeights = 2
+    RequestingServerUUID = 3
     # Not sure if there were any other messages to pass, but I figured I'd put this here.
 
 params = {
     'world_input_size': 2,
     'world_to_task': 1000,
     'task_to_agent': 1000,
-    'agent_1_action_space_size': 4
+    'agent_1_action_space_size': 4,
+    'agent_2_action_space_size': 4,
 }
 
 #####################################################################################################
@@ -144,6 +146,25 @@ class Agent1(Shared_Model_Object):
         #assigning stuff
         self.assign_w1_placeholder = tf.placeholder(tf.float32, shape=[params['task_to_agent'], params['agent_1_action_space_size']])
         self.assign_b1_placeholder = tf.placeholder(tf.float32, shape=[params['agent_1_action_space_size']])
+        self.assign_w1 = self.w1.assign(self.assign_w1_placeholder)
+        self.assign_b1 = self.b1.assign(self.assign_b1_placeholder)
+        self.assign_add_w1 = self.w1.assign_add(self.assign_w1_placeholder)
+        self.assign_add_b1 = self.b1.assign_add(self.assign_b1_placeholder)
+        # outside vars
+        self.layers = [ self.w1, self.b1 ]
+        self.assigns = [self.assign_w1, self.assign_b1]
+        self.assign_adds = [self.assign_add_w1, self.assign_add_b1]
+        self.assigns_placeholders = [self.assign_w1_placeholder, self.assign_b1_placeholder]
+class Agent2(Shared_Model_Object):
+    def __init__(self, sess):
+        Shared_Model_Object.__init__(self)
+        self.sess = sess
+        # Layer 1
+        self.w1 = tf.Variable(tf.random_normal([params['task_to_agent'], params['agent_2_action_space_size']], stddev=0.01, dtype=tf.float32), name="A2_L1_w")
+        self.b1 = tf.Variable(tf.constant(0.1, shape=[params['agent_2_action_space_size']], dtype=tf.float32), name="A2_L1_b")
+        #assigning stuff
+        self.assign_w1_placeholder = tf.placeholder(tf.float32, shape=[params['task_to_agent'], params['agent_2_action_space_size']])
+        self.assign_b1_placeholder = tf.placeholder(tf.float32, shape=[params['agent_2_action_space_size']])
         self.assign_w1 = self.w1.assign(self.assign_w1_placeholder)
         self.assign_b1 = self.b1.assign(self.assign_b1_placeholder)
         self.assign_add_w1 = self.w1.assign_add(self.assign_w1_placeholder)

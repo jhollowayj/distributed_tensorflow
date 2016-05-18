@@ -1,12 +1,11 @@
-import numpy as np
 import time
-import os, sys
-# sys.path.append(os.path.abspath(os.path.join('..', 'simpleMazeWorlds')))
-
+import numpy as np
 import client
 import GenericAgent
 import JacobsMazeWorld
+import statistics
 from networks import NetworkType, Messages
+
 
 ### COMMAND LINE ARGUMENTS ###
 import argparse
@@ -16,22 +15,28 @@ parser.add_argument('--world_id', '-wid', default=1, type=int, required=False, h
 parser.add_argument('--task_id', '-tid',  default=1, type=int, required=False, help="ID of the task(start/end positions) you want to use")
 parser.add_argument('--agent_id', '-aid', default=1, type=int, required=False, help="ID of the agent you want to use (nsew/sewn/ewns/etc")
 # AGENT
-parser.add_argument('--num_episodes', '-ne', default=10000,  type=int, required=False, help="")
-parser.add_argument('--annealing_size', '-an', default=100,  type=int, required=False, help="")
+parser.add_argument('--num_episodes', '-ne', default=15000,  type=int, required=False, help="")
+parser.add_argument('--annealing_size', '-an', default=3000,  type=int, required=False, help="")
 parser.add_argument('--epsilon', '-e', default=0.04,  type=float, required=False, help="")
-parser.add_argument('--observer', '-o', default=False,  type=bool, required=False, help="")
+parser.add_argument('--observer', '-o', default=False,  action='store_true', required=False, help="")
+parser.add_argument('--evaluate_peridocally', '-eval', default=False, action='store_true', required=False, help="")
+parser.add_argument('--eval_episodes_between_evaluation', '-eval_steps', default=145, type=int, required=False,
+                    help="Ignored if evaluate_peridocally is false.  Run this many episodes before evaluating.  150 seems to be fine (TODO Verify)")
+parser.add_argument('--eval_episodes_to_take', '-eval_len', default=5, type=int, required=False, 
+                    help="Ignored if evaluate_peridocally is false.  defaults to (TODO find a good one)")
+parser.add_argument('--codename', '-name', default="", type=str, required=False, help="code name used to display in sql")
 # NEURAL-NET       #Discount Factor, Learning Rate, etc. TODO
-parser.add_argument('--allow_local_nn_weight_updates', '-nnu', default=False,  type=bool, required=False, help="")
-parser.add_argument('--requested_gpu_vram_percent', '-vram', default=0.01,  type=float, required=False, help="")
+parser.add_argument('--allow_local_nn_weight_updates', '-nnu', default=False,  action='store_true', required=False, help="")
+parser.add_argument('--requested_gpu_vram_percent', '-vram', default=0.02,  type=float, required=False, help="")
 parser.add_argument('--device_to_use', '-device', default=1,  type=int, required=False, help="")
 # RUNNER
 parser.add_argument('--max_steps_per_episode', '-msteps', default=200,  type=int, required=False, help="")
-parser.add_argument('--write_csv', default=False,  type=bool, required=False, help="")
-parser.add_argument('--csv_filename', default="tmp_res.csv",  type=bool, required=False, help="")
 parser.add_argument('--verbose', '-v', default=0,  type=int, required=False, help="")
+parser.add_argument('--report_to_sql', '-sql', default=False, action='store_true', required=False, help="")
 # CLIENT-SERVER
 parser.add_argument('--gradients_until_send', '-grads', default=1,  type=int, required=False, help="")
-parser.add_argument('--ignore_server', '-is', default=False,  type=bool, required=False, help="")
+parser.add_argument('--ignore_server', '-is', default=False, action='store_true', required=False, help="")
+parser.add_argument('--num_parallel_learners', '-npar', default=-1, type=int, required=False, help="")
 args = parser.parse_args()
 ### COMMAND LINE ARGUMENTS ###
 
@@ -54,12 +59,12 @@ def cb(network_type, network_id):
 ### INITIALIZE OBJECTS ###
 world = JacobsMazeWorld.JacobsMazeWorld(
     world_id = args.world_id,
-    task_id = args.task_id,
+    task_id  = args.task_id,
     agent_id = args.agent_id)
     
 tf_client = client.ModDNN_ZMQ_Client(
     world_id = args.world_id,
-    task_id = args.task_id,
+    task_id  = args.task_id,
     agent_id = args.agent_id)
     
 agent = GenericAgent.Agent(
@@ -69,10 +74,12 @@ agent = GenericAgent.Agent(
     epsilon=args.epsilon,
     batch_size=5,
     annealing_size=int(args.annealing_size), # annealing_size=args.annealing_size,
-    allow_local_nn_weight_updates = args.allow_local_nn_weight_updates,
+    allow_local_nn_weight_updates = args.allow_local_nn_weight_updates or args.ignore_server,
     requested_gpu_vram_percent = args.requested_gpu_vram_percent,
     device_to_use = args.device_to_use,
     )
+
+learner_uuid = statistics.get_new_uuid()
 
 if not args.ignore_server:
     tf_client.setWeightsAvailableCallback(cb)
@@ -80,21 +87,49 @@ if not args.ignore_server:
     agent.set_weights(tf_client.requestNetworkWeights(NetworkType.World), NetworkType.World)
     agent.set_weights(tf_client.requestNetworkWeights(NetworkType.Task),  NetworkType.Task)
     agent.set_weights(tf_client.requestNetworkWeights(NetworkType.Agent), NetworkType.Agent)
+    server_uuid = tf_client.request_server_uuid()
+else:
+    server_uuid = learner_uuid # Cheating... but that's ok.  ... We could do None! but I'm not sure how that breaks whenwe get to sql...
+
+# SQL
+if args.report_to_sql:
+    database = statistics.Statistics(host="aji.cs.byu.edu", port=5432, db="mod_dnn_research")
+    database.log_game_settings(
+        learner_uuid=learner_uuid,
+        parallel_learning_session_uuid=server_uuid,
+        world_id=args.world_id,
+        task_id=args.task_id,
+        agent_id=args.agent_id,
+        max_episode_count=args.max_steps_per_episode,
+        annealing_size=args.annealing_size, 
+        final_epsilon=args.epsilon,
+        num_parallel_learners=args.num_parallel_learners,
+        using_experience_replay=agent.is_using_experience_replay(),
+        codename=args.codename)
 ### INITIALIZE OBJECTS ###
 
+        
 ### RUN !!!!!!!!!!!!! ###
-if args.write_csv:
-    csv = open(args.csv_filename,'w', 0)
-    csv.write("episode,total_reward,cost,max_q,endEpsilon,didFinish\n")
+def is_eval_episode(e):
+    is_eval = None
+    if args.evaluate_peridocally:
+        period = args.eval_episodes_between_evaluation + args.eval_episodes_to_take
+        is_eval = e % period < args.eval_episodes_between_evaluation
+    else:
+        is_eval = False # Ignore it by default
+    return is_eval
+    
+         
 starttime = time.time()
 update_cnt = 1
 didwin, window = [], 25
 for episode in xrange(args.num_episodes):
+    agent.set_evaluate_flag(is_eval_episode(episode))
     done = False
     world.reset()
     agent.new_episode()
     frame, max_q, min_q, sum_q = 0, 0 - np.Infinity, np.Infinity, 0.0
-    arr, actions = world.heatmap_adder(), [0,0,0,0]
+    actions, act_Vals = [0,0,0,0], [0,0,0,0] #HARD CODED
     while world.is_running() and world.get_time() < args.max_steps_per_episode: 
         frame += 1
         update_cnt += 1
@@ -105,26 +140,29 @@ for episode in xrange(args.num_episodes):
 
         max_q = max(max_q, np.max(values))
         min_q = min(min_q, np.min(values))
-        sum_q += np.sum(values)/len(values)
-        
+        act_Vals += values
         actions[action] += 1
-        arr += world.heatmap_adder()
     
+    act_Vals = act_Vals[0]
     cost = agent.train(reward) # IS this where it goes wrong?
     if not args.ignore_server:
         if update_cnt % args.gradients_until_send == 0:
             send_gradients()
         tf_client.poll_once() # calls the callback added above if weights available!
     # REPORTTING
-    runtime = time.time() - starttime
-    totaltime = runtime / (episode+1) * args.num_episodes
-    didwin.append(0 if world.is_running() else 1)
-
-    windlen = int(window if window < len(didwin) else len(didwin))
-    print "episode: %6d::%4d/%4ds:: Re:%5.1f, QMa/Mi/Av:%7.3f/%7.3f/%7.3f, m.cost: %9.4f, end.E: %4.3f, W?: %s, AvgW%d: %3.1f%%" % \
-          (episode, runtime, totaltime, world.get_score(), max_q, min_q, (sum_q / frame),
-           (cost/frame), agent.calculate_epsilon(), "N" if world.is_running() else "Y", 
-           window, 100.0*np.sum(didwin[-windlen:])/windlen) 
-    if args.write_csv:
-        csv.write("{},{},{},{},{},{}\n".format(e, world.get_score(), (cost/frame), max_q, agent.calculate_epsilon(), 0 if world.is_running() else 1))
-if args.write_csv: csv.close()
+    if args.verbose >= 0:
+        
+        print "%s = ep: %6d:: Re:%5.1f, QMa/Mi/%7.3f/%7.3f,  avg_NSEW:[%7.2f/ %7.2f/ %7.2f/ %7.2f], c: %9.4f, E: %4.3f, W?: %s" % \
+            ("{}.{}.{}".format(args.world_id, args.task_id, args.agent_id),
+            episode,  world.get_score(), max_q, min_q,
+            act_Vals[0]/frame, act_Vals[1]/frame, act_Vals[2]/frame, act_Vals[3]/frame,
+            (cost/frame), agent.calculate_epsilon(), "N" if world.is_running() else "Y")
+    if args.report_to_sql:
+        database.save_episode(
+            learner_uuid = learner_uuid, episode = episode, steps_in_episode = frame,
+            total_reward = world.get_score(), q_max = max_q, q_min = min_q, 
+            avg_action_value_n = act_Vals[0]/frame, avg_action_value_e = act_Vals[1]/frame,
+            avg_action_value_s = act_Vals[2]/frame, avg_action_value_w = act_Vals[3]/frame,
+            mean_cost = cost/frame,  end_epsilon = agent.calculate_epsilon(),
+            did_win = not world.is_running(), 
+            is_evaluation=is_eval_episode(episode))

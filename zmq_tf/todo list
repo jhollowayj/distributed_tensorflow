@@ -1,16 +1,5 @@
 Code:
-    Server:
-        ---Check tf.save/load on server---
-        ---Implement flag to reset/wipe ckpts--- Just use false, and it will overwrite it.
-    Agent:
-        --Add sql to agent--
-        --Add is_eval true--
-    General:
-        Script to start new learners (x slaves, 1 master w/ is_eval true
-    Reporting:
-        ---Mostly Done by Robert:---
-            redash: Sql script, (x=time, y = reward, series=codename where codename != "")
-            redash: Sql script, (x=time, y = movAvg(x10, did_win) where codename != "" and is_eval)
+    Script to start new learners (x slaves, 1 master w/ is_eval true
 
 
 Experiments:

@@ -1,10 +1,7 @@
 import time
 import numpy as np
-import client
-import GenericAgent
+import AllKnowingAgent
 import JacobsMazeWorld
-import statistics
-from networks import NetworkType, Messages
 
 
 ### COMMAND LINE ARGUMENTS ###
@@ -15,7 +12,7 @@ parser.add_argument('--world_id', '-wid', default=1, type=int, required=False, h
 parser.add_argument('--task_id', '-tid',  default=1, type=int, required=False, help="ID of the task(start/end positions) you want to use")
 parser.add_argument('--agent_id', '-aid', default=1, type=int, required=False, help="ID of the agent you want to use (nsew/sewn/ewns/etc")
 # AGENT
-parser.add_argument('--num_episodes', '-ne', default=15000,  type=int, required=False, help="")
+parser.add_argument('--num_episodes', '-ne', default=10000,  type=int, required=False, help="")
 parser.add_argument('--annealing_size', '-an', default=3000,  type=int, required=False, help="")
 parser.add_argument('--epsilon', '-e', default=0.04,  type=float, required=False, help="")
 parser.add_argument('--observer', '-o', default=False,  action='store_true', required=False, help="")
@@ -34,28 +31,8 @@ parser.add_argument('--device_to_use', '-device', default=1,  type=int, required
 parser.add_argument('--max_steps_per_episode', '-msteps', default=200,  type=int, required=False, help="")
 parser.add_argument('--verbose', '-v', default=0,  type=int, required=False, help="")
 parser.add_argument('--report_to_sql', '-sql', default=False, action='store_true', required=False, help="")
-# CLIENT-SERVER
-parser.add_argument('--gradients_until_send', '-grads', default=1,  type=int, required=False, help="")
-parser.add_argument('--ignore_server', '-is', default=False, action='store_true', required=False, help="")
-parser.add_argument('--num_parallel_learners', '-npar', default=-1, type=int, required=False, help="")
 args = parser.parse_args()
 ### COMMAND LINE ARGUMENTS ###
-
-### OTHER FUNCTIONS ###
-def send_gradients():
-    if args.verbose >= 1: print "     sending Gradients!!!!"
-    s = time.time()
-    grads = agent.get_gradients()
-    tf_client.sendGradients(grads[0], NetworkType.World)
-    tf_client.sendGradients(grads[1], NetworkType.Task)
-    tf_client.sendGradients(grads[2], NetworkType.Agent)
-    end = time.time()
-    if args.verbose >= 2: print "   Time to send gradients was {} seconds".format(end-s)
-def cb(network_type, network_id):
-    # print "CALLBACK: {} {}".format(network_type, network_id)
-    ws = tf_client.requestNetworkWeights(network_type)
-    agent.set_weights(ws, network_type)
-### OTHER FUNCTIONS ###
 
 ### INITIALIZE OBJECTS ###
 world = JacobsMazeWorld.JacobsMazeWorld(
@@ -63,12 +40,7 @@ world = JacobsMazeWorld.JacobsMazeWorld(
     task_id  = args.task_id,
     agent_id = args.agent_id)
     
-tf_client = client.ModDNN_ZMQ_Client(
-    world_id = args.world_id,
-    task_id  = args.task_id,
-    agent_id = args.agent_id)
-    
-agent = GenericAgent.Agent(
+agent = AllKnowingAgent.Agent(
     state_size=world.get_state_space(),
     number_of_actions=len(world.get_action_space()),
     input_scaling_vector=world.get_state__maxes(),
@@ -76,41 +48,11 @@ agent = GenericAgent.Agent(
     batch_size=250,
     use_experience_replay=args.use_experience_replay,
     annealing_size=int(args.annealing_size), # annealing_size=args.annealing_size,
-    allow_local_nn_weight_updates = args.allow_local_nn_weight_updates or args.ignore_server,
+    allow_local_nn_weight_updates = args.allow_local_nn_weight_updates,
     requested_gpu_vram_percent = args.requested_gpu_vram_percent,
     device_to_use = args.device_to_use,
     )
 
-learner_uuid = statistics.get_new_uuid()
-print "======== CLIENT using LEARNER-UUID: ========\n=== {} ===\n============================================".format(learner_uuid)
-if not args.ignore_server:
-    tf_client.setWeightsAvailableCallback(cb)
-    #Request and set initial weights
-    agent.set_weights(tf_client.requestNetworkWeights(NetworkType.World), NetworkType.World)
-    agent.set_weights(tf_client.requestNetworkWeights(NetworkType.Task),  NetworkType.Task)
-    agent.set_weights(tf_client.requestNetworkWeights(NetworkType.Agent), NetworkType.Agent)
-    server_uuid = tf_client.request_server_uuid()
-else:
-    server_uuid = learner_uuid # Cheating... but that's ok.  ... We could do None! but I'm not sure how that breaks whenwe get to sql...
-
-# SQL
-if args.report_to_sql:
-    database = statistics.Statistics(host="aji.cs.byu.edu", port=5432, db="mod_dnn_research")
-    database.log_game_settings(
-        learner_uuid=learner_uuid,
-        parallel_learning_session_uuid=server_uuid,
-        world_id=args.world_id,
-        task_id=args.task_id,
-        agent_id=args.agent_id,
-        max_episode_count=args.max_steps_per_episode,
-        annealing_size=args.annealing_size, 
-        final_epsilon=args.epsilon,
-        num_parallel_learners=args.num_parallel_learners,
-        using_experience_replay=agent.is_using_experience_replay(),
-        codename=args.codename)
-### INITIALIZE OBJECTS ###
-
-        
 ### RUN !!!!!!!!!!!!! ###
 def is_eval_episode(e):
     is_eval = None
@@ -122,11 +64,30 @@ def is_eval_episode(e):
     return is_eval
     
          
-starttime = time.time()
 update_cnt = 1
 didwin, window = [], 25
+
+# Grab all the experiences possible...
+states = world.get_all_possible_states()
+# print "States:\n", states
+# world.render()
+exp = []
+for state in states:
+    for act in world.get_action_space():
+        next_state, reward, terminal = world.act(act, state[0], state[1])
+        exp.append([state, act, next_state, np.clip(reward, -1, 1), terminal])
+        # x = exp[-1]
+        # print "Action: {} goes from {} to {}, r:{}, t:{}".format(x[1], x[0], x[2], x[3], x[4])
+exp = np.array(exp).T
+# for x in exp:
+#     print "{}".format(x)
+
+# Now just train for ever!
+cost = agent.train_everything(args.num_episodes, exp[0].tolist(),exp[1].tolist(),exp[2].tolist(), exp[3].tolist(), exp[4].tolist())
+
+print "\n\n====\n Now testing\n====\n\n"
 for episode in xrange(args.num_episodes):
-    agent.set_evaluate_flag(is_eval_episode(episode))
+    agent.set_evaluate_flag(True)
     done = False
     world.reset()
     agent.new_episode()
@@ -138,8 +99,8 @@ for episode in xrange(args.num_episodes):
 
         cur_state = world.get_state()
         action, values = agent.select_action(np.array(cur_state))
-        reward = world.act(action)
-        agent.stash_reward(reward)
+        next_state, reward, terminal = world.act(action)
+        agent.stash_new_exp(cur_state, action, np.clip(reward,-1,1), terminal, next_state)
 
         max_q = max(max_q, np.max(values))
         min_q = min(min_q, np.min(values))
@@ -147,10 +108,6 @@ for episode in xrange(args.num_episodes):
         actions[action] += 1
     
     cost = agent.train()
-    if not args.ignore_server:
-        if update_cnt % args.gradients_until_send == 0:
-            send_gradients()
-        tf_client.poll_once() # calls the callback added above if weights available!
 
     # REPORTTING
     act_Vals = act_Vals[0]

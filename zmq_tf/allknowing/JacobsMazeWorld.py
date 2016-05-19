@@ -125,7 +125,7 @@ class JacobsMazeWorld():
             self.agent_location = (cur_x, cur_y)
             # 1 # Do nothing
         elif self.checkEnd(desiredCell):         # Did I win?
-            reward_for_movement = 50.0
+            reward_for_movement = 10.0
             self.agent_location = desiredCell
             terminal = True
             self.did_finish = True

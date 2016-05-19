@@ -4,6 +4,9 @@ import AllKnowingAgent
 import JacobsMazeWorld
 
 
+
+
+
 ### COMMAND LINE ARGUMENTS ###
 import argparse
 parser = argparse.ArgumentParser()
@@ -31,11 +34,58 @@ parser.add_argument('--device_to_use', '-device', default=1,  type=int, required
 parser.add_argument('--max_steps_per_episode', '-msteps', default=200,  type=int, required=False, help="")
 parser.add_argument('--verbose', '-v', default=0,  type=int, required=False, help="")
 parser.add_argument('--report_to_sql', '-sql', default=False, action='store_true', required=False, help="")
+# CLIENT-SERVER
+parser.add_argument('--gradients_until_send', '-grads', default=1,  type=int, required=False, help="")
+parser.add_argument('--ignore_server', '-is', default=False, action='store_true', required=False, help="")
+parser.add_argument('--num_parallel_learners', '-npar', default=-1, type=int, required=False, help="")
 args = parser.parse_args()
 ### COMMAND LINE ARGUMENTS ###
 
+### OTHER FUNCTIONS ###
+def send_gradients():
+    if args.verbose >= 1: print "     sending Gradients!!!!"
+    s = time.time()
+    grads = agent.get_gradients()
+    tf_client.sendGradients(grads[0], NetworkType.World)
+    tf_client.sendGradients(grads[1], NetworkType.Task)
+    tf_client.sendGradients(grads[2], NetworkType.Agent)
+    end = time.time()
+    if args.verbose >= 2: print "   Time to send gradients was {} seconds".format(end-s)
+def cb(network_type, network_id):
+    # print "CALLBACK: {} {}".format(network_type, network_id)
+    ws = tf_client.requestNetworkWeights(network_type)
+    agent.set_weights(ws, network_type)
+    
+def uuddlrlrba_start_konami_cheat(verbose=False):
+    ''' Gets a set experience database of small worlds, allows network to train perfectly, quickly'''
+    # Grab all the experiences possible...
+    states = world.get_all_possible_states()
+    if verbose:
+        print "States:\n", states
+        world.render()
+    exp = []
+    for state in states:
+        for act in world.get_action_space():
+            next_state, reward, terminal = world.act(act, state[0], state[1])
+            exp.append([state, act, next_state, reward, terminal])
+            if verbose:
+                x = exp[-1]
+                print "Action: {} goes from {} to {}, r:{}, t:{}".format(x[1], x[0], x[2], x[3], x[4])
+    exp = np.array(exp).T
+    if verbose:
+        for x in exp:
+            print "{}".format(x)
+    # Now just train for ever!
+    cost = agent.train_everything(4000, exp[0].tolist(),exp[1].tolist(),exp[2].tolist(), exp[3].tolist(), exp[4].tolist())
+### OTHER FUNCTIONS ###
+
 ### INITIALIZE OBJECTS ###
 world = JacobsMazeWorld.JacobsMazeWorld(
+    world_id = args.world_id,
+    task_id  = args.task_id,
+    agent_id = args.agent_id)
+    
+tf_client = client.ModDNN_ZMQ_Client(
     world_id = args.world_id,
     task_id  = args.task_id,
     agent_id = args.agent_id)
@@ -53,6 +103,36 @@ agent = AllKnowingAgent.Agent(
     device_to_use = args.device_to_use,
     )
 
+learner_uuid = statistics.get_new_uuid()
+print "======== CLIENT using LEARNER-UUID: ========\n=== {} ===\n============================================".format(learner_uuid)
+if not args.ignore_server:
+    tf_client.setWeightsAvailableCallback(cb)
+    #Request and set initial weights
+    agent.set_weights(tf_client.requestNetworkWeights(NetworkType.World), NetworkType.World)
+    agent.set_weights(tf_client.requestNetworkWeights(NetworkType.Task),  NetworkType.Task)
+    agent.set_weights(tf_client.requestNetworkWeights(NetworkType.Agent), NetworkType.Agent)
+    server_uuid = tf_client.request_server_uuid()
+else:
+    server_uuid = learner_uuid # Cheating... but that's ok.  ... We could do None! but I'm not sure how that breaks whenwe get to sql...
+
+# SQL
+if args.report_to_sql:
+    database = statistics.Statistics(host="aji.cs.byu.edu", port=5432, db="mod_dnn_research")
+    database.log_game_settings(
+        learner_uuid=learner_uuid,
+        parallel_learning_session_uuid=server_uuid,
+        world_id=args.world_id,
+        task_id=args.task_id,
+        agent_id=args.agent_id,
+        max_episode_count=args.max_steps_per_episode,
+        annealing_size=args.annealing_size, 
+        final_epsilon=args.epsilon,
+        num_parallel_learners=args.num_parallel_learners,
+        using_experience_replay=agent.is_using_experience_replay(),
+        codename=args.codename)
+### INITIALIZE OBJECTS ###
+
+        
 ### RUN !!!!!!!!!!!!! ###
 def is_eval_episode(e):
     is_eval = None
@@ -63,31 +143,13 @@ def is_eval_episode(e):
         is_eval = False # Ignore it by default
     return is_eval
     
-         
+    
+starttime = time.time()
 update_cnt = 1
 didwin, window = [], 25
-
-# Grab all the experiences possible...
-states = world.get_all_possible_states()
-# print "States:\n", states
-# world.render()
-exp = []
-for state in states:
-    for act in world.get_action_space():
-        next_state, reward, terminal = world.act(act, state[0], state[1])
-        exp.append([state, act, next_state, np.clip(reward, -1, 1), terminal])
-        # x = exp[-1]
-        # print "Action: {} goes from {} to {}, r:{}, t:{}".format(x[1], x[0], x[2], x[3], x[4])
-exp = np.array(exp).T
-# for x in exp:
-#     print "{}".format(x)
-
-# Now just train for ever!
-cost = agent.train_everything(args.num_episodes, exp[0].tolist(),exp[1].tolist(),exp[2].tolist(), exp[3].tolist(), exp[4].tolist())
-
 print "\n\n====\n Now testing\n====\n\n"
 for episode in xrange(args.num_episodes):
-    agent.set_evaluate_flag(True)
+    agent.set_evaluate_flag(is_eval_episode(episode))
     done = False
     world.reset()
     agent.new_episode()
@@ -100,7 +162,7 @@ for episode in xrange(args.num_episodes):
         cur_state = world.get_state()
         action, values = agent.select_action(np.array(cur_state))
         next_state, reward, terminal = world.act(action)
-        agent.stash_new_exp(cur_state, action, np.clip(reward,-1,1), terminal, next_state)
+        agent.stash_new_exp(cur_state, action, reward, terminal, next_state)
 
         max_q = max(max_q, np.max(values))
         min_q = min(min_q, np.min(values))
@@ -108,6 +170,10 @@ for episode in xrange(args.num_episodes):
         actions[action] += 1
     
     cost = agent.train()
+    if not args.ignore_server:
+        if update_cnt % args.gradients_until_send == 0:
+            send_gradients()
+        tf_client.poll_once() # calls the callback added above if weights available!
 
     # REPORTTING
     act_Vals = act_Vals[0]

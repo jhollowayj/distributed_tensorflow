@@ -64,6 +64,7 @@ class DQN:
             ##
 
             ### Gradients ###
+            self.clear_gradients()
             self.assign_w1_placeholder = tf.placeholder(tf.float32, shape=[self.params['input_dims'], layer_1_hidden])
             self.assign_b1_placeholder = tf.placeholder(tf.float32, shape=[layer_1_hidden])
             self.assign_w2_placeholder = tf.placeholder(tf.float32, shape=[layer_1_hidden, layer_2_hidden])
@@ -89,13 +90,7 @@ class DQN:
             self.Q_pred = tf.reduce_sum(tf.mul(self.y,self.actions), reduction_indices=1, name="nn_q_pred")
             self.cost = tf.reduce_sum(tf.pow(tf.sub(self.yj, self.Q_pred), 2), name="nn_cost")
 
-            self.rmsprop = tf.train.RMSPropOptimizer(self.params['lr'],self.params['rms_decay'],0.0,self.params['rms_eps'])
             self.rmsprop_min = tf.train.RMSPropOptimizer(self.params['lr'],self.params['rms_decay'],0.0,self.params['rms_eps']).minimize(self.cost)
-            #self.rmsprop_min = tf.train.AdamOptimizer(.00025).minimize(self.cost)
-            
-            self.comp_grads = self.rmsprop.compute_gradients(self.cost)
-            self.grad_placeholder = [(tf.placeholder("float", shape=grad[1].get_shape(), name="grad_placeholder"), grad[1]) for grad in self.comp_grads]
-            self.apply_grads = self.rmsprop.apply_gradients(self.grad_placeholder)
 
         self.sess.run(tf.initialize_all_variables())
         tf.get_default_graph().finalize() # Disallow any more nodes to be added. Helps for debugging later

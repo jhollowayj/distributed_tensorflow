@@ -1,6 +1,8 @@
 from interface import World
 import numpy as np
 from enum import Enum
+import numpy as np
+from enum import Enum
 
 
 class direction(Enum):
@@ -79,10 +81,18 @@ class JacobsMazeWorld(World):
         return not self.did_finish
 
     def render(self):
-        mazecopy = np.array(self.maze)
-        mazecopy[self.agent_location[0], self.agent_location[1]] = -1
-        print mazecopy
-        print "                              Score:{}  (+ {})".format(m.get_score(), score)
+        mazecopy = []
+        for x in np.array(self.maze):
+            t = []
+            for y in x:
+                if y.value == 1:
+                    t.append(' ')
+                else: 
+                    t.append(str(y.value))
+            mazecopy.append(t) 
+        # mazecopy[self.agent_location[0], self.agent_location[1]] = -1
+        print np.array(mazecopy)
+        # print "                              Score:{}  (+ {})".format(m.get_score(), score)
 
     def checkEnd(self, desiredCell):
         return self.endLocation == desiredCell
@@ -92,7 +102,10 @@ class JacobsMazeWorld(World):
         #        desiredCell == (10,  1) or \
         #        desiredCell == ( 1, 10)
         
-    def act(self, action):
+    def act(self, action, cur_x=None, cur_y=None):
+        if cur_x is None: cur_x = self.agent_location[0]
+        if cur_y is None: cur_y = self.agent_location[1]
+
         self.time += 1
         # print action
         move = self.action_mapping[action]
@@ -101,20 +114,23 @@ class JacobsMazeWorld(World):
         
         # Calculate that cell
         desiredCell = None
-        if   move == direction.n: desiredCell = (self.agent_location[0]-1, self.agent_location[1])
-        elif move == direction.s: desiredCell = (self.agent_location[0]+1, self.agent_location[1])
-        elif move == direction.e: desiredCell = (self.agent_location[0], self.agent_location[1]+1)
-        elif move == direction.w: desiredCell = (self.agent_location[0], self.agent_location[1]-1)
+        if   move == direction.n: desiredCell = (cur_x-1, cur_y)
+        elif move == direction.s: desiredCell = (cur_x+1, cur_y)
+        elif move == direction.e: desiredCell = (cur_x, cur_y+1)
+        elif move == direction.w: desiredCell = (cur_x, cur_y-1)
         else: print "Error on calculating the desired cell, action was invalid..."
         desiredCellType = self.maze[desiredCell[0], desiredCell[1]]
         
         # Calcualte Reward + Move
+        terminal = False
         if desiredCellType == maze_object.wall:   # Was it a wall?  I don't like walls...
             reward_for_movement -= 0.1
+            self.agent_location = (cur_x, cur_y)
             # 1 # Do nothing
         elif self.checkEnd(desiredCell):         # Did I win?
-            reward_for_movement = 50.0
+            reward_for_movement = 10.0
             self.agent_location = desiredCell
+            terminal = True
             self.did_finish = True
         elif desiredCellType == maze_object.coin:   # No?  Is there a coin?
             self.agent_location = desiredCell
@@ -126,14 +142,18 @@ class JacobsMazeWorld(World):
 
         self.currentScore += reward_for_movement
 
-        return reward_for_movement
+        # next_state = (None, None) if terminal else self.agent_location
+        next_state = self.agent_location
+        return next_state, reward_for_movement, terminal
 
     def get_time(self):
         return self.time
 
-    def calc_distance_to_goal(self):
-        dx = np.abs(self.agent_location[0] - self.endLocation[0])
-        dy = np.abs(self.agent_location[1] - self.endLocation[1])
+    def calc_distance_to_goal(self, cur_x=None, cur_y=None):
+        if cur_x is None: cur_x = self.agent_location[0]
+        if cur_y is None: cur_y = self.agent_location[1]
+        dx = np.abs(self.cur_x - self.endLocation[0])
+        dy = np.abs(self.cur_y - self.endLocation[1])
         return dx, dy
         
     def get_surrounding_square(self, cur_x=None, cur_y=None):
@@ -159,12 +179,13 @@ class JacobsMazeWorld(World):
         if cur_y is None: cur_y = self.agent_location[1]
         if self.give_expanded_space:
             arr = []
-            arr += self.agent_location
+            arr += [cur_x, cur_y]
             # arr += self.get_surrounding_square(cur_x, cur_y) # Sync these with get_state__maxes
             # arr += self.calc_distance_to_goal()
             return arr
         else:
             return self.agent_location # For now, we just return the (x,y) position.
+            
     def get_state__maxes(self):
         if self.give_expanded_space:
             arr = []
@@ -174,6 +195,15 @@ class JacobsMazeWorld(World):
             return arr
         else:
             return [11,11] # For now, we just return the (x,y) position.
+            
+    def get_all_possible_states(self):
+        states = []
+        for x in range(12):
+            for y in range(12):
+                if self.maze[x, y] is not maze_object.wall:
+                    states.append(self.get_state(x, y))
+        return states
+        
     def get_score(self):
         return self.currentScore
 

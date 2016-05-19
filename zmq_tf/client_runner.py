@@ -7,6 +7,8 @@ import statistics
 from networks import NetworkType, Messages
 
 
+
+
 ### COMMAND LINE ARGUMENTS ###
 import argparse
 parser = argparse.ArgumentParser()
@@ -15,8 +17,8 @@ parser.add_argument('--world_id', '-wid', default=1, type=int, required=False, h
 parser.add_argument('--task_id', '-tid',  default=1, type=int, required=False, help="ID of the task(start/end positions) you want to use")
 parser.add_argument('--agent_id', '-aid', default=1, type=int, required=False, help="ID of the agent you want to use (nsew/sewn/ewns/etc")
 # AGENT
-parser.add_argument('--num_episodes', '-ne', default=15000,  type=int, required=False, help="")
-parser.add_argument('--annealing_size', '-an', default=3000,  type=int, required=False, help="")
+parser.add_argument('--num_episodes', '-ne', default=10000,  type=int, required=False, help="")
+parser.add_argument('--annealing_size', '-an', default=1500,  type=int, required=False, help="")
 parser.add_argument('--epsilon', '-e', default=0.04,  type=float, required=False, help="")
 parser.add_argument('--observer', '-o', default=False,  action='store_true', required=False, help="")
 parser.add_argument('--use_experience_replay', '-exp', default=False,  action='store_true', required=False, help="")
@@ -55,6 +57,28 @@ def cb(network_type, network_id):
     # print "CALLBACK: {} {}".format(network_type, network_id)
     ws = tf_client.requestNetworkWeights(network_type)
     agent.set_weights(ws, network_type)
+    
+def uuddlrlrba_start_konami_cheat(verbose=False):
+    ''' Gets a set experience database of small worlds, allows network to train perfectly, quickly'''
+    # Grab all the experiences possible...
+    states = world.get_all_possible_states()
+    if verbose:
+        print "States:\n", states
+        world.render()
+    exp = []
+    for state in states:
+        for act in world.get_action_space():
+            next_state, reward, terminal = world.act(act, state[0], state[1])
+            exp.append([state, act, next_state, reward, terminal])
+            if verbose:
+                x = exp[-1]
+                print "Action: {} goes from {} to {}, r:{}, t:{}".format(x[1], x[0], x[2], x[3], x[4])
+    exp = np.array(exp).T
+    if verbose:
+        for x in exp:
+            print "{}".format(x)
+    # Now just train for ever!
+    cost = agent.train_everything(4000, exp[0].tolist(),exp[1].tolist(),exp[2].tolist(), exp[3].tolist(), exp[4].tolist())
 ### OTHER FUNCTIONS ###
 
 ### INITIALIZE OBJECTS ###
@@ -76,7 +100,7 @@ agent = GenericAgent.Agent(
     batch_size=250,
     use_experience_replay=args.use_experience_replay,
     annealing_size=int(args.annealing_size), # annealing_size=args.annealing_size,
-    allow_local_nn_weight_updates = args.allow_local_nn_weight_updates or args.ignore_server,
+    allow_local_nn_weight_updates = args.allow_local_nn_weight_updates,
     requested_gpu_vram_percent = args.requested_gpu_vram_percent,
     device_to_use = args.device_to_use,
     )
@@ -121,10 +145,11 @@ def is_eval_episode(e):
         is_eval = False # Ignore it by default
     return is_eval
     
-         
+    
 starttime = time.time()
 update_cnt = 1
 didwin, window = [], 25
+print "\n\n====\n Now testing\n====\n\n"
 for episode in xrange(args.num_episodes):
     agent.set_evaluate_flag(is_eval_episode(episode))
     done = False
@@ -138,8 +163,8 @@ for episode in xrange(args.num_episodes):
 
         cur_state = world.get_state()
         action, values = agent.select_action(np.array(cur_state))
-        reward = world.act(action)
-        agent.stash_reward(reward)
+        next_state, reward, terminal = world.act(action)
+        agent.stash_new_exp(cur_state, action, reward, terminal, next_state)
 
         max_q = max(max_q, np.max(values))
         min_q = min(min_q, np.min(values))

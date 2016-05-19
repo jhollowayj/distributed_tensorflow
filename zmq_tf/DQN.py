@@ -90,11 +90,7 @@ class DQN:
             self.Q_pred = tf.reduce_sum(tf.mul(self.y,self.actions), reduction_indices=1, name="nn_q_pred")
             self.cost = tf.reduce_sum(tf.pow(tf.sub(self.yj, self.Q_pred), 2), name="nn_cost")
 
-            self.rmsprop = tf.train.RMSPropOptimizer(self.params['lr'],self.params['rms_decay'],0.0,self.params['rms_eps'])
             self.rmsprop_min = tf.train.RMSPropOptimizer(self.params['lr'],self.params['rms_decay'],0.0,self.params['rms_eps']).minimize(self.cost)
-            self.comp_grads = self.rmsprop.compute_gradients(self.cost)
-            self.grad_placeholder = [(tf.placeholder("float", shape=grad[1].get_shape(), name="grad_placeholder"), grad[1]) for grad in self.comp_grads]
-            self.apply_grads = self.rmsprop.apply_gradients(self.grad_placeholder)
 
         self.sess.run(tf.initialize_all_variables())
         tf.get_default_graph().finalize() # Disallow any more nodes to be added. Helps for debugging later
@@ -134,12 +130,8 @@ class DQN:
         self._grad_b3 = np.zeros(([self.params['num_act']])).astype(np.float32)
         self._gradient_list = [ self._grad_w1, self._grad_b1, self._grad_w2, self._grad_b2, self._grad_w3, self._grad_b3]
 
-    def _get_gradients(self): # removed to help with the average gradients code added below
-        # print self._gradient_list[0][0][0] # Debugging
-        return self._gradient_list, self.num_grads_accumulated
-        
     def get_and_clear_gradients(self):
-        grads, num_grads_summed = self._get_gradients()
+        grads, num_grads_summed = self._gradient_list, self.num_grads_accumulated
         self.clear_gradients()
         start = grads[0][0][0]
         ###      Average the gradients now ###
@@ -150,31 +142,23 @@ class DQN:
             print "Returning grads[0][0][0] of {} / {} = {}".format(start, num_grads_summed, grads[0][0][0])
         return grads
 
-    def train(self,bat_s,bat_a,bat_t,bat_n,bat_r):
-        '''Please note: This allows the networks to change their weights!'''
-        feed_dict={self.x: bat_s, self.q_t: np.zeros(bat_n.shape[0]), self.actions: bat_a, self.terminals:bat_t, self.rewards: bat_r}
-        q_t = np.amax( self.sess.run(self.y,feed_dict=feed_dict) ,axis=1)
-        feed_dict={self.x: bat_s, self.q_t: q_t, self.actions: bat_a, self.terminals:bat_t, self.rewards: bat_r}
-        
-        starts = self.sess.run(self.all_layers)
+    def train(self, states, actions, rewards, terminals, next_states, display=False):
+        q_target_max = np.amax(self.q(next_states), axis=1) # Pick the next state's best value to use in the reward (curRew + discount*(nextRew))
+
+        start_weights = self.sess.run(self.all_layers)
+        feed_dict={self.x: states, self.q_t: q_target_max, self.actions: actions, self.rewards: rewards, self.terminals:terminals}
         _, costs = self.sess.run([self.rmsprop_min, self.cost], feed_dict=feed_dict)
-        ends = self.sess.run(self.all_layers)
-        
-        self.stash_gradients([ends[i] - starts[i] for i in range(len(starts))])
+        end_weights = self.sess.run(self.all_layers)
+
+        self.stash_gradients([end_weights[i] - start_weights[i] for i in range(len(start_weights))])
         if not self.params['allow_local_nn_weight_updates']:
-            self.set_all_weights(starts)
+            self.set_all_weights(start_weights)
 
         return costs
         
-    def q(self, bat_s):
-        return self.sess.run(self.y, feed_dict = {
-            self.x: bat_s,
-            self.q_t: np.zeros(1),
-            self.actions: np.zeros((1, self.params['num_act'])),
-            self.terminals:np.zeros(1),
-            self.rewards: np.zeros(1)
-        })
+    def q(self, states):
+        return self.sess.run(self.y, feed_dict={self.x: states})
         
     def save_weights(self, name, boolean_for_something):
-        # w1, b2 = self.sess.run([self.w1, self.b2])
-        return
+        # SAVE WEIGHTS?!?  CLIENTS DON'T GET TO SAVE WEIGHTS.  THOSE COME FROM THE SERVER!
+        pass

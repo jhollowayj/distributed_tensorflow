@@ -1,9 +1,12 @@
 import numpy as np
 import tensorflow as tf
 import time
+
+import RProp
+
 class DQN:
     def __init__(self, input_dims = 2, num_act = 4,
-            eps = 1.0, discount = 0.95, lr =  0.0002,
+            eps = 1.0, discount = 0.5, lr =  0.0002,
             rms_eps = 1e-6, rms_decay=0.99,
             allow_local_nn_weight_updates=False,
             requested_gpu_vram_percent=0.01,
@@ -20,7 +23,12 @@ class DQN:
             'allow_local_nn_weight_updates': allow_local_nn_weight_updates,
             'requested_gpu_vram_percent': requested_gpu_vram_percent, 
             'verbose': verbose,
+            'learning_rate_start':  0.003,
+            'learning_rate_end':    0.003, #0.000001,
+            'learning_rate_decay':  3000,
         }
+        self.test_state_space = 12*12 # TODO REMOVE ME!!!
+        self.test_action_space = 4 # TODO REMOVE ME!!!
         
         if self.params['allow_local_nn_weight_updates']:
             print "NOTE: network is allowed to update his own weights!" 
@@ -59,9 +67,13 @@ class DQN:
             self.w3 = tf.Variable(tf.random_normal([layer_2_hidden, self.params['num_act']], stddev=0.01, dtype=tf.float32), name="nn_L3_w")
             self.b3 = tf.Variable(tf.constant(0.1, shape=[self.params['num_act']], dtype=tf.float32), name="nn_L3_b")
             self.y = tf.add(tf.matmul(self.o2,self.w3),self.b3, name="y_OR_nn_L3_output")
+
             ##
             self.all_layers = [self.w1, self.b1, self.w2, self.b2, self.w3, self.b3]
             ##
+            self.x = tf.placeholder(tf.float32, shape=[None, self.test_state_space]) # TODO REMOVE ME!!!
+            self.test_weight = tf.Variable(tf.random_normal([self.test_state_space, self.test_action_space]))# TODO REMOVE ME!!!
+            self.y = tf.matmul(self.x, self.test_weight) # TODO REMOVE ME!!!
 
             ### Gradients ###
             self.clear_gradients()
@@ -90,12 +102,28 @@ class DQN:
             self.Q_pred = tf.reduce_sum(tf.mul(self.y,self.actions), reduction_indices=1, name="nn_q_pred")
             self.cost = tf.reduce_sum(tf.pow(tf.sub(self.yj, self.Q_pred), 2), name="nn_cost")
 
-            self.rmsprop_min = tf.train.RMSPropOptimizer(self.params['lr'],self.params['rms_decay'],0.0,self.params['rms_eps']).minimize(self.cost)
+            ## DEBUGGING ##
+            with tf.device("/cpu:0"):
+                self.global_step = tf.Variable(0, name='global_step', trainable=False)
+                self.rmsprop_min = RProp.RPropOptimizer().minimize(self.cost, global_step=self.global_step)
+    
+            self.learning_rate_annealing_rate = (self.params['learning_rate_start'] - self.params['learning_rate_end']) / self.params['learning_rate_decay']
+            self.learning_rate = tf.maximum(self.params['learning_rate_end'],
+                                            self.params['learning_rate_start'] - (self.learning_rate_annealing_rate * tf.to_float(self.global_step)))
+            # self.rmsprop_min = tf.train.RMSPropOptimizer(self.learning_rate,self.params['rms_decay'],0.0,self.params['rms_eps']).minimize(self.cost, global_step=self.global_step)
+            ##  END DEBUGGING ##
+            
+            # self.rmsprop_min = tf.train.RMSPropOptimizer(self.learning_rate,self.params['rms_decay'],0.0,self.params['rms_eps']).minimize(self.cost)
 
         self.sess.run(tf.initialize_all_variables())
         tf.get_default_graph().finalize() # Disallow any more nodes to be added. Helps for debugging later
         print "###\n### Networks initialized\n### Ready to begin\n###"
     
+    def test_one_hot(self, state_tuple): # Hard coded # TODO REMOVE ME!!!
+        onehot = [0] * self.test_state_space # TODO REMOVE ME!!!
+        onehot[state_tuple[0]*12 + state_tuple[1]] = 1 # TODO REMOVE ME!!!
+        return onehot # TODO REMOVE ME!!!
+
     def set_all_weights(self, allweights):
         self.sess.run([
             self.assign_w1, self.assign_b1, self.assign_w2, self.assign_b2, self.assign_w3, self.assign_b3],
@@ -146,6 +174,7 @@ class DQN:
         q_target_max = np.amax(self.q(next_states), axis=1) # Pick the next state's best value to use in the reward (curRew + discount*(nextRew))
 
         start_weights = self.sess.run(self.all_layers)
+        states = np.array([self.test_one_hot(s) for s in states]) # TODO REMOVE ME
         feed_dict={self.x: states, self.q_t: q_target_max, self.actions: actions, self.rewards: rewards, self.terminals:terminals}
         _, costs = self.sess.run([self.rmsprop_min, self.cost], feed_dict=feed_dict)
         end_weights = self.sess.run(self.all_layers)
@@ -156,9 +185,15 @@ class DQN:
 
         return costs
         
+    def lr_eval(self):
+        return self.sess.run(self.learning_rate)
+        
     def q(self, states):
+        states = np.array([self.test_one_hot(s) for s in states]) # TODO REMOVE ME
+        # print "\n\n State.shape: {}, weights.shape:{}\n\n".format(states.shape, self.test_weight.eval(self.sess).shape) # TODO REMOVE ME
         return self.sess.run(self.y, feed_dict={self.x: states})
         
     def save_weights(self, name, boolean_for_something):
         # SAVE WEIGHTS?!?  CLIENTS DON'T GET TO SAVE WEIGHTS.  THOSE COME FROM THE SERVER!
         pass
+        

@@ -195,3 +195,39 @@ class Agent:
                     vals[action_index][x][y] = action_value
         return vals
     
+    
+###############################################################################
+###############################################################################
+###############################################################################
+#####################  THIS IS ME CHEATING...  ################################
+###############################################################################
+###############################################################################
+###############################################################################
+
+    index_state_2_1 = None
+    def train_everything(self, num_episodes, state, action, next_state, reward, terminal):
+        S = np.array(state)
+        A = np.array([self.onehot(act) for act in action])
+        R = np.array(reward)
+        T = np.array(terminal)
+        NS= np.array(next_state)
+        
+        # if index_state_2_1 is None:
+        #     for s in state:
+        #         if s[0] == 2 and s[1] == 1:
+        #             index_state_2_1 == state
+
+        import time
+        t, onek = time.time(), []
+        for episode in xrange(num_episodes):    
+            cost = self.train_fn(S, A, R, T, NS, episode % 100 == 0)
+            if episode % 15 == 0:
+                a, b = self.select_action(np.array([1,2]))
+                print "{}\te{}\tcost:{}\t [1,2]: {} (4) {:15.10f}{:15.10f}{:15.10f}{:15.10f}  -- {}".format("testing", episode, cost, 
+                        1+a, b[0][0], b[0][1], b[0][2], b[0][3], b[0].shape)
+                if episode % 1000 == 0:
+                    onek.append(time.time() - t)
+        e = time.time()
+        print "\n\nTime:{}".format(e - t)
+        for i in range(len(onek)):
+            print "    {} : {}".format(1000*i, onek[i])

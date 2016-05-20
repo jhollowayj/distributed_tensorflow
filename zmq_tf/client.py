@@ -15,9 +15,9 @@ class ModDNN_ZMQ_Client:
             'AgentServerHostName': "localhost",
         }
         self.ZMQ_setup(config) 
-        self.world_id = 1
-        self.task_id = 1
-        self.agent_id = 1
+        self.world_id = world_id
+        self.task_id  = task_id
+        self.agent_id = agent_id
         self.network_id_lookup = {
             NetworkType.World: self.world_id,
             NetworkType.Task : self.task_id,

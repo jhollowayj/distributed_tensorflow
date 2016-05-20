@@ -124,7 +124,7 @@ class JacobsMazeWorld(World):
         # Calcualte Reward + Move
         terminal = False
         if desiredCellType == maze_object.wall:   # Was it a wall?  I don't like walls...
-            reward_for_movement -= 0.1
+            # reward_for_movement -= 0.1
             self.agent_location = (cur_x, cur_y)
             # 1 # Do nothing
         elif self.checkEnd(desiredCell):         # Did I win?

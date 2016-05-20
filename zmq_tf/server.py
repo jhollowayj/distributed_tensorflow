@@ -6,6 +6,10 @@ import statistics
 import networks as networks, Ops
 from networks import NetworkType, Messages
 
+import errno    
+import os
+
+
 class ModDNN_ZMQ_Server:
     def __init__(self, just_one_server=True, serverType=NetworkType.World,
                  server_learning_rate=1, grad_update_cnt_before_send=2, 
@@ -26,7 +30,7 @@ class ModDNN_ZMQ_Server:
             'ckpt_save_interval': ckpt_save_interval,
             'load_ckpt_file_on_start': load_ckpt_file_on_start,
         }
-        
+        self.make_dirs_for_save_file(weights_ckpt_file)
         np.random.seed(self.config['tensorflow_random_seed'])
         self.weight_update_cnt = 0.0
         self.client_announce_cnt = 0.0
@@ -34,9 +38,11 @@ class ModDNN_ZMQ_Server:
         print "Servver setup:: ##################### ", self.nnetworks[NetworkType.World][1].get_model_weights()[0].shape
         self.ZMQ_setup()
         self.server_uuid = statistics.get_new_uuid()
+        print "======== SERVER using SERVER-UUID:  {} ========\n============================================".format(self.server_uuid)
+
 
 ###############################################################################
-       
+
     def ZMQ_setup(self):
         self.context = zmq.Context()
         self.poller = zmq.Poller()
@@ -95,6 +101,14 @@ class ModDNN_ZMQ_Server:
             print "Initializing _all _variables on server"
 
 ###############################################################################
+    def make_dirs_for_save_file(self, filename):
+        if not os.path.exists(os.path.dirname(filename)):
+            try:
+                os.makedirs(os.path.dirname(filename))
+            except OSError as exc: # Guard against race condition
+                if exc.errno != errno.EEXIST:
+                    raise
+
     # TODO make sure this doesn't break when we switch to use separate servers... if we ever get that far.
     def save_weights(self):
         save_path = self.saver.save(self.sess, self.config['weights_ckpt_file'])
@@ -253,7 +267,7 @@ class ModDNN_ZMQ_Server:
         # print "server Polling results: {}".format(socks)
         if self.param_rr in socks:
             self.handle_client_request(self.param_rr)
-        elif self.grad_recv in socks:
+        if self.grad_recv in socks:
             self.handle_incoming_gradients(self.grad_recv)
         
         # Maybe save the weights to disk periodically?

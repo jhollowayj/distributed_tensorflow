@@ -17,9 +17,9 @@ parser.add_argument('--world_id', '-wid', default=1, type=int, required=False, h
 parser.add_argument('--task_id', '-tid',  default=1, type=int, required=False, help="ID of the task(start/end positions) you want to use")
 parser.add_argument('--agent_id', '-aid', default=1, type=int, required=False, help="ID of the agent you want to use (nsew/sewn/ewns/etc")
 # AGENT
-parser.add_argument('--num_episodes', '-ne', default=10000,  type=int, required=False, help="")
+parser.add_argument('--num_episodes', '-ne', default=5000,  type=int, required=False, help="")
 parser.add_argument('--annealing_size', '-an', default=1500,  type=int, required=False, help="")
-parser.add_argument('--epsilon', '-e', default=0.04,  type=float, required=False, help="")
+parser.add_argument('--epsilon', '-e', default=0.01,  type=float, required=False, help="")
 parser.add_argument('--observer', '-o', default=False,  action='store_true', required=False, help="")
 parser.add_argument('--use_experience_replay', '-exp', default=False,  action='store_true', required=False, help="")
 parser.add_argument('--evaluate_peridocally', '-eval', default=False, action='store_true', required=False, help="")
@@ -33,9 +33,10 @@ parser.add_argument('--allow_local_nn_weight_updates', '-nnu', default=False,  a
 parser.add_argument('--requested_gpu_vram_percent', '-vram', default=0.02,  type=float, required=False, help="")
 parser.add_argument('--device_to_use', '-device', default=1,  type=int, required=False, help="")
 # RUNNER
-parser.add_argument('--max_steps_per_episode', '-msteps', default=200,  type=int, required=False, help="")
+parser.add_argument('--max_steps_per_episode', '-msteps', default=150,  type=int, required=False, help="")
 parser.add_argument('--verbose', '-v', default=0,  type=int, required=False, help="")
 parser.add_argument('--report_to_sql', '-sql', default=False, action='store_true', required=False, help="")
+parser.add_argument('--uuddlrlrba', '-udud', default=False, action='store_true', required=False, help="")
 # CLIENT-SERVER
 parser.add_argument('--gradients_until_send', '-grads', default=1,  type=int, required=False, help="")
 parser.add_argument('--ignore_server', '-is', default=False, action='store_true', required=False, help="")
@@ -61,6 +62,7 @@ def cb(network_type, network_id):
 def uuddlrlrba_start_konami_cheat(verbose=False):
     ''' Gets a set experience database of small worlds, allows network to train perfectly, quickly'''
     # Grab all the experiences possible...
+    print "\n\n=========\n=========\n Entering the cheat mode.\n=========\n=========\n\n"
     states = world.get_all_possible_states()
     if verbose:
         print "States:\n", states
@@ -78,7 +80,8 @@ def uuddlrlrba_start_konami_cheat(verbose=False):
         for x in exp:
             print "{}".format(x)
     # Now just train for ever!
-    cost = agent.train_everything(4000, exp[0].tolist(),exp[1].tolist(),exp[2].tolist(), exp[3].tolist(), exp[4].tolist())
+    cost = agent.train_everything(20000, exp[0].tolist(),exp[1].tolist(),exp[2].tolist(), exp[3].tolist(), exp[4].tolist())
+    print "\n\n=========\n=========\n Leaving the cheat mode.\n=========\n=========\n\n"
 ### OTHER FUNCTIONS ###
 
 ### INITIALIZE OBJECTS ###
@@ -106,7 +109,6 @@ agent = GenericAgent.Agent(
     )
 
 learner_uuid = statistics.get_new_uuid()
-print "======== CLIENT using LEARNER-UUID: ========\n=== {} ===\n============================================".format(learner_uuid)
 if not args.ignore_server:
     tf_client.setWeightsAvailableCallback(cb)
     #Request and set initial weights
@@ -116,6 +118,9 @@ if not args.ignore_server:
     server_uuid = tf_client.request_server_uuid()
 else:
     server_uuid = learner_uuid # Cheating... but that's ok.  ... We could do None! but I'm not sure how that breaks whenwe get to sql...
+
+print "======== CLIENT using LEARNER-UUID: {} ========\n============================================".format(learner_uuid)
+print "======== CLIENT using SERVER-UUID:  {} ========\n============================================".format(server_uuid)
 
 # SQL
 if args.report_to_sql:
@@ -134,6 +139,8 @@ if args.report_to_sql:
         codename=args.codename)
 ### INITIALIZE OBJECTS ###
 
+if args.uuddlrlrba:
+    uuddlrlrba_start_konami_cheat()
         
 ### RUN !!!!!!!!!!!!! ###
 def is_eval_episode(e):
@@ -180,11 +187,18 @@ for episode in xrange(args.num_episodes):
     # REPORTTING
     act_Vals = act_Vals[0]
     if args.verbose >= 0:
-        print "%s = ep: %6d:: Re:%5.1f, QMa/Mi/%7.3f/%7.3f,  avg_NSEW:[%7.2f/ %7.2f/ %7.2f/ %7.2f], c: %9.4f, E: %4.3f, W?: %s" % \
-            ("{}.{}.{}".format(args.world_id, args.task_id, args.agent_id),
-            episode,  world.get_score(), max_q, min_q,
-            act_Vals[0]/frame, act_Vals[1]/frame, act_Vals[2]/frame, act_Vals[3]/frame,
-            (cost/frame), agent.calculate_epsilon(), "N" if world.is_running() else "Y")
+        ## DEBUGGING ##
+        if episode % 15 == 0:
+            a, b = agent.select_action(np.array([1,2]))
+            print "{}\te{}\tcost:{}\t [1,2]: {} (4) {:15.6f}{:15.6f}{:15.6f}{:15.6f}  -- {}".format("testing", episode, cost, 
+                1+a, b[0][0], b[0][1], b[0][2], b[0][3], agent.model.lr_eval())
+        ## DEBUGGING ##
+        
+        # print "%s = ep: %6d:: Re:%5.1f, QMa/Mi/%7.3f/%7.3f,  avg_NSEW:[%7.2f/ %7.2f/ %7.2f/ %7.2f], c: %9.4f, E: %4.3f, W?: %s" % \
+        #     ("{}.{}.{}".format(args.world_id, args.task_id, args.agent_id),
+        #     episode,  world.get_score(), max_q, min_q,
+        #     act_Vals[0]/frame, act_Vals[1]/frame, act_Vals[2]/frame, act_Vals[3]/frame,
+        #     (cost/frame), agent.calculate_epsilon(), "N" if world.is_running() else "Y")
     if args.report_to_sql:
         database.save_episode(
             learner_uuid = learner_uuid, episode = episode, steps_in_episode = frame,

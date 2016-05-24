@@ -1,6 +1,8 @@
 import subprocess
 import time
 import numpy as np
+import numpy.random
+import random
 import argparse
 import sys
 
@@ -16,7 +18,10 @@ parser.add_argument('--agents2games1', '-a2xg1', default=False, action='store_tr
                     help="Launches 2 agents on the same game")
 parser.add_argument('--agents4games1', '-a4xg1', default=False, action='store_true', required=False,
                     help="Launches 2 agents on the same game")
-    
+parser.add_argument('--doResearch', '-all', default=False, action='store_true', required=False,
+                    help="Launches multiple instances to train different sections of the networks")
+parser.add_argument('--test_single_worlds', '-tsw', default=False, action='store_true', required=False)
+parser.add_argument('--comp_softmax', '-csm', default=False, action='store_true', required=False)
 if len(sys.argv)==1: # If no arguments, display the help and quit!
     parser.print_help()
     sys.exit(1)
@@ -39,17 +44,25 @@ def launch_command(command):
     subprocess.call(open_terminal_command.format(command), shell=True)
     
 def launch_client(args):
-    time.sleep(0.1)
+    randEpsilon, longGame, randDevice = True, True, True
+    if randEpsilon:
+        args = "-e {} ".format(random.uniform(0.01,0.25)) + args
+    if longGame:
+        args = "-an 15000 -ne 50000 " + args
+    if randDevice:
+        args = "-device {} ".format(np.random.randint(2)) + args
+    print "Launching Client W/ Args: {}".format(args)
+    time.sleep(0.2)
     launch_command("python {}client_runner.py {}".format(path, args))
     
 def launch_server(args):
-    time.sleep(1)
-    launch_command("python {}server_runner.py {}".format(path, args))
+    time.sleep(2)
+    launch_command("python {}server_runner.py -device 0 {}".format(path, args))
     
 ###############################################################################
 
 def calc_grad_sends_ratios(N_agents):
-    grads = 16
+    grads = 16 # 16 seems to work well...
     sends = N_agents # space it out too far causes explosions...
     return  grads, N_agents
 
@@ -61,12 +74,12 @@ def codename_creator(ids, nTotalAgents, nAgentsOnThisGame):
 
 ###############################################################################
 
-def test_1_agent_1_world__no_server():
-    launch_client('-is -sql -exp -nnu --codename "singleagent.singlegame.noserver"')
+def test_1_agent_1_world__no_server(ids=[1,1,1]):
+    launch_client('{} -is -sql -exp -nnu --codename "singleagent.singlegame.noserver.{}.{}.{}"'.format(id_args(ids), ids[0],ids[1],ids[2]))
 
 def test_1_agent_1_game():
     launch_client('-grads 1 -exp -sql --codename "singleagent.singlegame.withserver"') # TODO add in -sql once it's working
-    launch_server('-v 3 -send 1')
+    launch_server('-v 2 -send 1')
     
 def test_N_agent_1_game(N_agents = 1):
     grads, sends = calc_grad_sends_ratios(N_agents)
@@ -77,18 +90,26 @@ def test_N_agent_1_game(N_agents = 1):
 
     launch_server('-v 3 -send {}'.format(sends))
 
-def test_mulitagent_multigame(games_settings=[[1,1,1]], num_players=[1]):
-    total_agents = np.sum(num_players)
-    for i, game_settings in enumerate(games_settings):
+###############################################################################
+
+def test_mulitagent_multigame(games_settings=[[1,1,1]], num_players=[1], total_agents=0, server=True):
+    for i, game_setting in enumerate(games_settings):
         grads, sends = calc_grad_sends_ratios(num_players[i])
         for slave in range(num_players[i] - 1):
-            launch_client('{} -grads {} -npar {}'.format( id_args(game_settings), grads, num_players[i])) # No sql, no name for slaves
-        launch_client('{} -grads {} -npar {} --codename "{}"'.format( # TODO Add in -sql once it's working
-            id_args(game_settings), grads, num_players[i],
-            codename_creator(game_settings, total_agents, num_players[i])))
+            launch_client('{} -grads {} -npar {}'.format( id_args(game_setting), grads, total_agents)) # No sql, no name for slaves
+        launch_client('{} -grads {} -sql -npar {} --codename "{}"'.format( # TODO Add in -sql once it's working
+            id_args(game_setting), grads, total_agents,
+            codename_creator(game_setting, total_agents, num_players[i])))
+            
+    if server:
+        launch_server('-v 3 -send {}'.format(sends))
 
-    launch_server('-v 3 -send {}'.format(sends))
-
+def client_evaluators(games_settings=[[1,1,1]], total_agents=0):
+    for game_setting in games_settings:
+        launch_client('{} -npar {} -sql -o --codename "Evaluator:{}"'.format( # TODO Add in -sql once it's working
+            id_args(game_setting), total_agents,
+            codename_creator(game_setting, total_agents, -1)))
+    
 ###############################################################################
 
 
@@ -97,8 +118,50 @@ if args.single_solo:
 if args.single_w_server:
     test_1_agent_1_game()
 if args.agents6games2:
-    test_mulitagent_multigame([[1,1,1],[1,1,2]], [1,1])
+    test_mulitagent_multigame([[1,1,1],[1,1,2]], [4,4])
 if args.agents2games1:
     test_N_agent_1_game(2)
 if args.agents4games1:
     test_N_agent_1_game(8)
+if args.doResearch:
+    num_trainers_per_game = 3
+    train_games = [
+        [1,1,1], [1,1,2],
+        [1,2,2], [1,2,3],
+        [1,3,1], [1,3,3]
+    ]
+    test_games = [
+        [1,1,3],
+        [1,2,1],
+        [1,3,2]
+    ]
+    total_agent_count = num_trainers_per_game*len(train_games) + len(test_games)
+    # Launch! 
+    test_mulitagent_multigame(train_games, [num_trainers_per_game]*len(train_games), total_agent_count, server=False)
+    client_evaluators(test_games, total_agent_count) # Launch clients to evaluate unseen paths
+    launch_server('-v 3 -send {}'.format(num_trainers_per_game*len(train_games))) # Launch Server
+    
+if args.test_single_worlds:
+    # test_1_agent_1_world__no_server([1,1,1])
+    # test_1_agent_1_world__no_server([1,1,2])
+    # test_1_agent_1_world__no_server([1,1,3])
+    
+    test_1_agent_1_world__no_server([1,2,1])
+    test_1_agent_1_world__no_server([1,2,2])
+    test_1_agent_1_world__no_server([1,2,3])
+    
+    # test_1_agent_1_world__no_server([1,3,1])
+    # test_1_agent_1_world__no_server([1,3,2])
+    # test_1_agent_1_world__no_server([1,3,3])
+    
+if args.comp_softmax:
+    ids = [[1,1,1], [1,1,2], [1,1,3]]
+    # ids = [[1,2,1], [1,2,2], [1,2,3]]
+    # ids = [[1,3,1], [1,3,2], [1,3,3]]
+    launch_client('{} -is -sql -exp -nnu --codename "singleagent.singlegame.noserver.{}.{}.{}"'.            format(id_args(ids[0]), ids[0][0],ids[0][1],ids[0][2]))
+    launch_client('{} -is -sql -exp -nnu --codename "singleagent.singlegame.noserver.{}.{}.{}"'.            format(id_args(ids[1]), ids[1][0],ids[1][1],ids[1][2]))
+    launch_client('{} -is -sql -exp -nnu --codename "singleagent.singlegame.noserver.{}.{}.{}"'.            format(id_args(ids[2]), ids[2][0],ids[2][1],ids[2][2]))
+    launch_client('{} -is -sql -exp -nnu -sm --codename "singleagent.singlegame.noserver.{}.{}.{}.softmax"'.format(id_args(ids[0]), ids[0][0],ids[0][1],ids[0][2]))
+    launch_client('{} -is -sql -exp -nnu -sm --codename "singleagent.singlegame.noserver.{}.{}.{}.softmax"'.format(id_args(ids[1]), ids[1][0],ids[1][1],ids[1][2]))
+    launch_client('{} -is -sql -exp -nnu -sm --codename "singleagent.singlegame.noserver.{}.{}.{}.softmax"'.format(id_args(ids[2]), ids[2][0],ids[2][1],ids[2][2]))
+

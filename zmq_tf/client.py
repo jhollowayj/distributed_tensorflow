@@ -126,16 +126,19 @@ class ModDNN_ZMQ_Client:
         return Ops.decompress_weights(response_string)
 
     def handle_message(self, socket):
-        msg_type, network_type, network_id = Ops.decompress_msg(socket.recv())
-        if (network_type == NetworkType.World and network_id == self.world_id) or\
-           (network_type == NetworkType.Task and network_id == self.task_id) or\
-           (network_type == NetworkType.Agent and network_id == self.world_id):
-            if self.callback_weights_available == None:
-                print "No callback set, Ignoring the update available"
-                return
-            else:
-                self.callback_weights_available(network_type, network_id)
-        
+        try:
+            msg_type, network_type, network_id = Ops.decompress_msg(socket.recv(flags=zmq.NOBLOCK))
+            if (network_type == NetworkType.World and network_id == self.world_id) or\
+            (network_type == NetworkType.Task and network_id == self.task_id) or\
+            (network_type == NetworkType.Agent and network_id == self.world_id):
+                if self.callback_weights_available == None:
+                    print "No callback set, Ignoring the update available"
+                    return
+                else:
+                    self.callback_weights_available(network_type, network_id)
+        except zmq.Again as e:
+            # print "ERR: No messages waiting to be processed"
+            pass
     def setWeightsAvailableCallback(self, cb):
         ''' Set function to call for when ZMQ gets a message of available weights
             Simulators should use this to know they can request updated weights (i.e. requestNetworkWeights)

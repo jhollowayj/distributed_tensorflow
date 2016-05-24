@@ -20,12 +20,13 @@ parser.add_argument('--agent_id', '-aid', default=1, type=int, required=False, h
 parser.add_argument('--num_episodes', '-ne', default=5000,  type=int, required=False, help="")
 parser.add_argument('--annealing_size', '-an', default=1500,  type=int, required=False, help="")
 parser.add_argument('--epsilon', '-e', default=0.01,  type=float, required=False, help="")
+parser.add_argument('--boltzman_softmax', '-sm', default=False,  action='store_true', required=False, help="")
 parser.add_argument('--observer', '-o', default=False,  action='store_true', required=False, help="")
 parser.add_argument('--use_experience_replay', '-exp', default=False,  action='store_true', required=False, help="")
 parser.add_argument('--evaluate_peridocally', '-eval', default=False, action='store_true', required=False, help="")
 parser.add_argument('--eval_episodes_between_evaluation', '-eval_steps', default=145, type=int, required=False,
                     help="Ignored if evaluate_peridocally is false.  Run this many episodes before evaluating.  150 seems to be fine (TODO Verify)")
-parser.add_argument('--eval_episodes_to_take', '-eval_len', default=5, type=int, required=False, 
+parser.add_argument('--eval_episodes_to_take', '-eval_len', default=5, type=int, required=False,
                     help="Ignored if evaluate_peridocally is false.  defaults to (TODO find a good one)")
 parser.add_argument('--codename', '-name', default="", type=str, required=False, help="code name used to display in sql")
 # NEURAL-NET       #Discount Factor, Learning Rate, etc. TODO
@@ -44,6 +45,15 @@ parser.add_argument('--num_parallel_learners', '-npar', default=-1, type=int, re
 args = parser.parse_args()
 ### COMMAND LINE ARGUMENTS ###
 
+if args.observer:
+    args.evaluate_peridocally = True
+    args.eval_episodes_between_evaluation = 10
+    args.eval_episodes_to_take = 10
+    args.allow_local_nn_weight_updates = False
+    args.epsilon = 0
+    args.annealing_size = 1
+    args.gradients_until_send = 10 + args.num_episodes
+
 ### OTHER FUNCTIONS ###
 def send_gradients():
     if args.verbose >= 1: print "     sending Gradients!!!!"
@@ -58,7 +68,7 @@ def cb(network_type, network_id):
     # print "CALLBACK: {} {}".format(network_type, network_id)
     ws = tf_client.requestNetworkWeights(network_type)
     agent.set_weights(ws, network_type)
-    
+
 def uuddlrlrba_start_konami_cheat(verbose=False):
     ''' Gets a set experience database of small worlds, allows network to train perfectly, quickly'''
     # Grab all the experiences possible...
@@ -89,18 +99,19 @@ world = JacobsMazeWorld.JacobsMazeWorld(
     world_id = args.world_id,
     task_id  = args.task_id,
     agent_id = args.agent_id)
-    
+
 tf_client = client.ModDNN_ZMQ_Client(
     world_id = args.world_id,
     task_id  = args.task_id,
     agent_id = args.agent_id)
-    
+
 agent = GenericAgent.Agent(
     state_size=world.get_state_space(),
     number_of_actions=len(world.get_action_space()),
     input_scaling_vector=world.get_state__maxes(),
     epsilon=args.epsilon,
     batch_size=250,
+    boltzman_softmax= args.boltzman_softmax,
     use_experience_replay=args.use_experience_replay,
     annealing_size=int(args.annealing_size), # annealing_size=args.annealing_size,
     allow_local_nn_weight_updates = args.allow_local_nn_weight_updates,
@@ -108,20 +119,26 @@ agent = GenericAgent.Agent(
     device_to_use = args.device_to_use,
     )
 
-learner_uuid = statistics.get_new_uuid()
+if args.report_to_sql:
+    learner_uuid = statistics.get_new_uuid()
 if not args.ignore_server:
     tf_client.setWeightsAvailableCallback(cb)
     #Request and set initial weights
     agent.set_weights(tf_client.requestNetworkWeights(NetworkType.World), NetworkType.World)
     agent.set_weights(tf_client.requestNetworkWeights(NetworkType.Task),  NetworkType.Task)
     agent.set_weights(tf_client.requestNetworkWeights(NetworkType.Agent), NetworkType.Agent)
-    server_uuid = tf_client.request_server_uuid()
+    if args.report_to_sql:
+        server_uuid = tf_client.request_server_uuid()
 else:
-    server_uuid = learner_uuid # Cheating... but that's ok.  ... We could do None! but I'm not sure how that breaks whenwe get to sql...
+    if args.report_to_sql:
+        server_uuid = learner_uuid # Cheating... but that's ok.  ... We could do None! but I'm not sure how that breaks whenwe get to sql...
 
-print "======== CLIENT using LEARNER-UUID: {} ========\n============================================".format(learner_uuid)
-print "======== CLIENT using SERVER-UUID:  {} ========\n============================================".format(server_uuid)
-
+print "\n\nCodename: {}".format(args.codename)
+if args.report_to_sql:
+    print "============================================================="
+    print "======== CLIENT using LEARNER-UUID: {} ========".format(learner_uuid)
+    print "======== CLIENT using SERVER-UUID:  {} ========".format(server_uuid)
+    print "============================================================="
 # SQL
 if args.report_to_sql:
     database = statistics.Statistics(host="aji.cs.byu.edu", port=5432, db="mod_dnn_research")
@@ -132,7 +149,7 @@ if args.report_to_sql:
         task_id=args.task_id,
         agent_id=args.agent_id,
         max_episode_count=args.max_steps_per_episode,
-        annealing_size=args.annealing_size, 
+        annealing_size=args.annealing_size,
         final_epsilon=args.epsilon,
         num_parallel_learners=args.num_parallel_learners,
         using_experience_replay=agent.is_using_experience_replay(),
@@ -141,7 +158,7 @@ if args.report_to_sql:
 
 if args.uuddlrlrba:
     uuddlrlrba_start_konami_cheat()
-        
+
 ### RUN !!!!!!!!!!!!! ###
 def is_eval_episode(e):
     is_eval = None
@@ -151,8 +168,8 @@ def is_eval_episode(e):
     else:
         is_eval = False # Ignore it by default
     return is_eval
-    
-    
+
+
 starttime = time.time()
 update_cnt = 1
 didwin, window = [], 25
@@ -162,12 +179,9 @@ for episode in xrange(args.num_episodes):
     done = False
     world.reset()
     agent.new_episode()
-    frame, max_q, min_q, sum_q = 0, 0 - np.Infinity, np.Infinity, 0.0
+    max_q, min_q, sum_q = 0 - np.Infinity, np.Infinity, 0.0
     actions, act_Vals = [0,0,0,0], [0,0,0,0] #HARD CODED
-    while world.is_running() and world.get_time() < args.max_steps_per_episode: 
-        frame += 1
-        update_cnt += 1
-
+    while world.is_running() and world.get_time() < args.max_steps_per_episode:
         cur_state = world.get_state()
         action, values = agent.select_action(np.array(cur_state))
         next_state, reward, terminal = world.act(action)
@@ -177,34 +191,37 @@ for episode in xrange(args.num_episodes):
         min_q = min(min_q, np.min(values))
         act_Vals += values
         actions[action] += 1
-    
+
+    update_cnt += 1
     cost = agent.train()
     if not args.ignore_server:
         if update_cnt % args.gradients_until_send == 0:
+            print "SENDING GRADIENTS (x3)"
             send_gradients()
         tf_client.poll_once() # calls the callback added above if weights available!
 
     # REPORTTING
     act_Vals = act_Vals[0]
+    frame = world.get_time()
     if args.verbose >= 0:
         ## DEBUGGING ##
-        if episode % 15 == 0:
-            a, b = agent.select_action(np.array([1,2]))
-            print "{}\te{}\tcost:{}\t [1,2]: {} (4) {:15.6f}{:15.6f}{:15.6f}{:15.6f}  -- {}".format("testing", episode, cost, 
-                1+a, b[0][0], b[0][1], b[0][2], b[0][3], agent.model.lr_eval())
+        # if episode % 15 == 0:
+        #     a, b = agent.select_action(np.array([1,2]))
+        #     print "{}\te{}\tcost:{}\t [1,2]: {} (4) {:15.6f}{:15.6f}{:15.6f}{:15.6f}".format("testing", episode, cost,
+        #         1+a, b[0][0], b[0][1], b[0][2], b[0][3])
         ## DEBUGGING ##
-        
-        # print "%s = ep: %6d:: Re:%5.1f, QMa/Mi/%7.3f/%7.3f,  avg_NSEW:[%7.2f/ %7.2f/ %7.2f/ %7.2f], c: %9.4f, E: %4.3f, W?: %s" % \
-        #     ("{}.{}.{}".format(args.world_id, args.task_id, args.agent_id),
-        #     episode,  world.get_score(), max_q, min_q,
-        #     act_Vals[0]/frame, act_Vals[1]/frame, act_Vals[2]/frame, act_Vals[3]/frame,
-        #     (cost/frame), agent.calculate_epsilon(), "N" if world.is_running() else "Y")
+
+        print "%s = ep: %6d:: Re:%5.1f, QMa/Mi/%7.3f/%7.3f,  avg_NSEW:[%7.2f/ %7.2f/ %7.2f/ %7.2f], c: %9.4f, E: %4.3f, W?: %s" % \
+            ("{}.{}.{}".format(args.world_id, args.task_id, args.agent_id),
+            episode,  world.get_score(), max_q, min_q,
+            act_Vals[0]/frame, act_Vals[1]/frame, act_Vals[2]/frame, act_Vals[3]/frame,
+            (cost/frame), agent.calculate_epsilon(), "N" if world.is_running() else "Y")
     if args.report_to_sql:
         database.save_episode(
             learner_uuid = learner_uuid, episode = episode, steps_in_episode = frame,
-            total_reward = world.get_score(), q_max = max_q, q_min = min_q, 
+            total_reward = world.get_score(), q_max = max_q, q_min = min_q,
             avg_action_value_n = act_Vals[0]/frame, avg_action_value_e = act_Vals[1]/frame,
             avg_action_value_s = act_Vals[2]/frame, avg_action_value_w = act_Vals[3]/frame,
             mean_cost = cost/frame,  end_epsilon = agent.calculate_epsilon(),
-            did_win = not world.is_running(), 
+            did_win = not world.is_running(),
             is_evaluation=is_eval_episode(episode))

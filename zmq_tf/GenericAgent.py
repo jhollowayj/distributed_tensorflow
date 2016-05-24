@@ -4,7 +4,7 @@ from DQN import DQN
 
 class Agent:
     def __init__(self, state_size=None, number_of_actions=1, just_greedy=False,
-                 epsilon=0.1, batch_size=200, discount=0.99, memory=10000,
+                 epsilon=0.1, batch_size=200, discount=0.99, memory=10000, boltzman_softmax = False,
                  save_name='basic', save_freq=10, annealing_size=100, use_experience_replay=True,
                  input_scaling_vector=None, allow_local_nn_weight_updates=False,
                  requested_gpu_vram_percent = 0.01, device_to_use = 0):
@@ -17,6 +17,7 @@ class Agent:
         self.i = 1
         self.save_freq = save_freq
         self.iterations = 0
+        self.boltzman_softmax = boltzman_softmax
         self.annealing_size = annealing_size # number of steps, not number of games 
         self.just_greedy = just_greedy
         self.input_scaling_vector = input_scaling_vector
@@ -120,7 +121,11 @@ class Agent:
         #         # print "State {} became {}".format(tmp, state) # Debugging
         values = self.value_fn([state])
         if np.random.random() < self.calculate_epsilon():
-            action = np.random.randint(self.number_of_actions)
+            if self.boltzman_softmax:
+                Probz = values[0] + 0.1 - values[0].min()
+                action = np.random.choice(self.number_of_actions, p=Probz/Probz.sum())
+            else:
+                action = np.random.randint(self.number_of_actions)
         else: 
             action = values.argmax()
         return action, values

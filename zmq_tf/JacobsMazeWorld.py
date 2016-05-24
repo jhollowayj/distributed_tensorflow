@@ -51,9 +51,9 @@ class JacobsMazeWorld(World):
 
     def buildMaze(self):
         return {
-            2: self.buildMaze_upRight,
             1: self.buildMaze_staggered,
-            3: self.buildMaze_orgMaze
+            2: self.buildMaze_orgMaze,
+            3: self.buildMaze_upRight,
         }[self.world_id]() # Pick the right function and call it.
         
     def heatmap_adder(self):
@@ -124,7 +124,7 @@ class JacobsMazeWorld(World):
         # Calcualte Reward + Move
         terminal = False
         if desiredCellType == maze_object.wall:   # Was it a wall?  I don't like walls...
-            # reward_for_movement -= 0.1
+            reward_for_movement -= 0.1
             self.agent_location = (cur_x, cur_y)
             # 1 # Do nothing
         elif self.checkEnd(desiredCell):         # Did I win?
@@ -226,7 +226,7 @@ class JacobsMazeWorld(World):
         w, o, c = maze_object.wall, maze_object.open, maze_object.coin
         return np.array([
             [w,w,w,w,w,w,w,w,w,w,w,w], # [w w w w w w w w w w w w]
-            [w,c,c,c,c,c,c,c,w,c,w,w], # [w               w   w w]
+            [w,c,c,c,w,c,c,c,w,c,c,w], # [w       w       w     w]
             [w,c,w,c,c,c,w,c,c,c,w,w], # [w   w       w       w w]
             [w,c,c,c,w,c,c,c,w,c,c,w], # [w       w       w     w]
             [w,c,w,c,c,c,w,c,c,c,w,w], # [w   w       w       w w]

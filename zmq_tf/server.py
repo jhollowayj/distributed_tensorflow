@@ -146,33 +146,33 @@ class ModDNN_ZMQ_Server:
         if self.config['verbose'] >= 1: print "building tasks"
         self.nnetworks[NetworkType.Task] = {}
         self.nnetworks[NetworkType.Task][1] = networks.Task1(self.sess)
-        # self.nnetworks[NetworkType.Task][2] = networks.Task2(self.sess)
-        # self.nnetworks[NetworkType.Task][3] = networks.Task3(self.sess)
+        self.nnetworks[NetworkType.Task][2] = networks.Task2(self.sess)
+        self.nnetworks[NetworkType.Task][3] = networks.Task3(self.sess)
 
         self.savable_variables += self.nnetworks[NetworkType.Task][1].savable_vars()
-        # self.savable_variables += self.nnetworks[NetworkType.Task][2].savable_vars()
-        # self.savable_variables += self.nnetworks[NetworkType.Task][3].savable_vars()
+        self.savable_variables += self.nnetworks[NetworkType.Task][2].savable_vars()
+        self.savable_variables += self.nnetworks[NetworkType.Task][3].savable_vars()
 
         self.gradientCnts[NetworkType.Task] = {}
         self.gradientCnts[NetworkType.Task][1] = self.config['grad_update_cnt_before_send']
-        # self.gradientCnts[NetworkType.Task][2] = self.config['grad_update_cnt_before_send']
-        # self.gradientCnts[NetworkType.Task][3] = self.config['grad_update_cnt_before_send']
+        self.gradientCnts[NetworkType.Task][2] = self.config['grad_update_cnt_before_send']
+        self.gradientCnts[NetworkType.Task][3] = self.config['grad_update_cnt_before_send']
     
     def build_NN_agents(self):
         if self.config['verbose'] >= 1: print "building agents"
         self.nnetworks[NetworkType.Agent] = {}
         self.nnetworks[NetworkType.Agent][1] = networks.Agent1(self.sess)
         self.nnetworks[NetworkType.Agent][2] = networks.Agent2(self.sess)
-        # self.nnetworks[NetworkType.Agent][3] = networks.Agent3(self.sess)
+        self.nnetworks[NetworkType.Agent][3] = networks.Agent3(self.sess)
 
         self.savable_variables += self.nnetworks[NetworkType.Agent][1].savable_vars()
         self.savable_variables += self.nnetworks[NetworkType.Agent][2].savable_vars()
-        # self.savable_variables += self.nnetworks[NetworkType.Agent][3].savable_vars()
+        self.savable_variables += self.nnetworks[NetworkType.Agent][3].savable_vars()
 
         self.gradientCnts[NetworkType.Agent] = {}
         self.gradientCnts[NetworkType.Agent][1] = self.config['grad_update_cnt_before_send']
         self.gradientCnts[NetworkType.Agent][2] = self.config['grad_update_cnt_before_send']
-        # self.gradientCnts[NetworkType.Agent][3] = self.config['grad_update_cnt_before_send']
+        self.gradientCnts[NetworkType.Agent][3] = self.config['grad_update_cnt_before_send']
 
 ###############################################################################
 ###############################################################################
@@ -206,8 +206,7 @@ class ModDNN_ZMQ_Server:
         weights = self.nnetworks[network_type][network_id].get_model_weights()
         
         ## Debugging ## if network_type == 1 and network_id == 1: print "============ 1,1[0][0][0]: ", weights[0][0][0] 
-        receiving_socket.send(
-            Ops.compress_weights( weights ) )
+        receiving_socket.send( Ops.compress_weights( weights ) )
     
     
     def handle_incoming_gradients(self, receiving_socket):
@@ -221,16 +220,17 @@ class ModDNN_ZMQ_Server:
                 receiving_socket.recv())
         gradients = Ops.decompress_weights(compressed_gradients)
 
-        plus, start = gradients[0][0][0], self.nnetworks[network_type][network_id].get_model_weights()[0][0][0]
+        plus, start = np.sum(gradients[0]), np.sum(self.nnetworks[network_type][network_id].get_model_weights()[0])
         if self.config['verbose'] >= 3:
-            print "||| Recieved Gradient ({}.{}) {} * {} = {}.  Adding to {}.".format(network_type, network_id, plus, self.config['server_learning_rate'], plus * self.config['server_learning_rate'], start),
+            print "||| Recieved Gradient ({}.{}) {:7.4} * {} = {:7.4}.  x+ {:7.4} => ".format(
+                network_type, network_id, plus, self.config['server_learning_rate'], plus * self.config['server_learning_rate'], start),
 
         for g in gradients:
             g *= self.config['server_learning_rate']
 
         self.nnetworks[network_type][network_id].add_gradients(gradients)
         if self.config['verbose'] >= 3:
-            print "  Now it's {}".format(self.nnetworks[network_type][network_id].get_model_weights()[0][0][0]),
+            print "{:7.4}".format( np.sum(self.nnetworks[network_type][network_id].get_model_weights()[0])),
         if self.config['verbose'] >= 2: print
 
         # Save new weights if needed...

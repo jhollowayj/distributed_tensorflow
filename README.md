@@ -1,3 +1,5 @@
+**Paper drafts can be found in the [wiki](http://pccgit.cs.byu.edu/tetchart/modularDNN_Practice/wikis/home).**
+
 ### Design chart can be seen here:
 https://www.lucidchart.com/documents/view/d52e3617-3df2-46df-b3f1-ee42f73cf476
 

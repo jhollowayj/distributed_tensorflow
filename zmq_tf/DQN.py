@@ -6,8 +6,9 @@ import RProp
 
 class DQN:
     def __init__(self, input_dims = 2, num_act = 4,
-            eps = 1.0, discount = 0.90, lr =  0.0002,
-            rms_eps = 1e-6, rms_decay=0.99,
+            eps = 1.0, discount = 0.90, lr = 0.0002,
+            rms_eps = 1e-6, rms_decay=0.99, rms_momentum=0.0,
+            input_scaling_vector=None,
             allow_local_nn_weight_updates=False,
             requested_gpu_vram_percent=0.01,
             device_to_use=0, verbose = 0):
@@ -20,6 +21,8 @@ class DQN:
             'lr': lr,
             'rms_eps': rms_eps,
             'rms_decay': rms_decay,
+            'rms_momentum': rms_momentum,
+            'input_scaling_vector': None if input_scaling_vector is None else np.array(input_scaling_vector),
             'allow_local_nn_weight_updates': allow_local_nn_weight_updates,
             'requested_gpu_vram_percent': requested_gpu_vram_percent, 
             'verbose': verbose,
@@ -100,6 +103,8 @@ class DQN:
             ## DEBUGGING ##
             # with tf.device("/cpu:0"):
             #     self.global_step = tf.Variable(0, name='global_step', trainable=False)
+
+            # with tf.device("/cpu:0"):
             #     self.rmsprop_min = RProp.RPropOptimizer().minimize(self.cost, global_step=self.global_step)
     
             # self.learning_rate_annealing_rate = (self.params['learning_rate_start'] - self.params['learning_rate_end']) / self.params['learning_rate_decay']
@@ -108,7 +113,10 @@ class DQN:
             # self.rmsprop_min = tf.train.RMSPropOptimizer(self.learning_rate,self.params['rms_decay'],0.0,self.params['rms_eps']).minimize(self.cost, global_step=self.global_step)
             ##  END DEBUGGING ##
             
-            self.rmsprop_min = tf.train.RMSPropOptimizer(self.params['lr'],self.params['rms_decay'],0.0,self.params['rms_eps']).minimize(self.cost)
+            self.rmsprop_min = tf.train.RMSPropOptimizer(learning_rate=self.params['lr'],
+                                                         decay=self.params['rms_decay'],
+                                                         momentum=self.params['rms_momentum'],
+                                                         epsilon=self.params['rms_eps']).minimize(self.cost)
 
         self.sess.run(tf.initialize_all_variables())
         tf.get_default_graph().finalize() # Disallow any more nodes to be added. Helps for debugging later
@@ -139,7 +147,7 @@ class DQN:
             accumulate_grad += (episode_delta[i])
 
     def clear_gradients(self):
-        self.num_grads_accumulated = 0
+        self.num_grads_accumulated = 0 # TODO maybe move to TF, potentially could run faster...
         self._grad_w1 = np.zeros(([self.params['input_dims'], self.params['layer_1_hidden']])).astype(np.float32)
         self._grad_b1 = np.zeros(([self.params['layer_1_hidden']])).astype(np.float32)
         self._grad_w2 = np.zeros(([self.params['layer_1_hidden'], self.params['layer_2_hidden']])).astype(np.float32)
@@ -151,33 +159,34 @@ class DQN:
     def get_and_clear_gradients(self):
         grads, num_grads_summed = self._gradient_list, self.num_grads_accumulated
         self.clear_gradients()
-        start = np.sum(grads[0])
-        ###      Average the gradients now ###
-        for grad in grads:              # We only want the gradient average, not the giant number
-            grad /= num_grads_summed    #(should also help with exploding gradients)
-        ### End: Average the gradients now ###
-        # if self.params['verbose'] >= 1:
-        if True:
-            print "Returning grads sum(grad[0]) of {} / {} = {}".format(start, num_grads_summed, np.sum(grads[0]))
+        for grad in grads:              
+            grad /= num_grads_summed    
         return grads
 
-    def train(self, states, actions, rewards, terminals, next_states, display=False):
+    def train(self, states, actions, rewards, terminals, next_states, allow_update=True):
         q_target_max = np.amax(self.q(next_states), axis=1) # Pick the next state's best value to use in the reward (curRew + discount*(nextRew))
 
         start_weights = self.sess.run(self.all_layers)
-        feed_dict={self.x: states, self.q_t: q_target_max, self.actions: actions, self.rewards: rewards, self.terminals:terminals}
+        feed_dict={self.x: self.scale_state_input(states), self.q_t: q_target_max, self.actions: actions, self.rewards: rewards, self.terminals:terminals}
         _, costs = self.sess.run([self.rmsprop_min, self.cost], feed_dict=feed_dict)
         end_weights = self.sess.run(self.all_layers)
 
-        self.stash_gradients([end_weights[i] - start_weights[i] for i in range(len(start_weights))])
-        if not self.params['allow_local_nn_weight_updates']:
+        if allow_update:
+            self.stash_gradients([end_weights[i] - start_weights[i] for i in range(len(start_weights))])
+        if not self.params['allow_local_nn_weight_updates'] or not allow_update:
             self.set_all_weights(start_weights)
 
         return costs
         
     def q(self, states):
-        return self.sess.run(self.y, feed_dict={self.x: states})
-        
+        return self.sess.run(self.y, feed_dict={self.x: self.scale_state_input(states)})
+    
+    def scale_state_input(self, state_to_scale):
+        if self.params['input_scaling_vector'] is None:
+            return state_to_scale
+        else:
+            return np.array(state_to_scale) / self.params['input_scaling_vector']
+    
     def save_weights(self, name, boolean_for_something):
         # SAVE WEIGHTS?!?  CLIENTS DON'T GET TO SAVE WEIGHTS.  THOSE COME FROM THE SERVER!
         pass

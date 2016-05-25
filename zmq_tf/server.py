@@ -14,9 +14,8 @@ class ModDNN_ZMQ_Server:
     def __init__(self, just_one_server=True, serverType=NetworkType.World,
                  server_learning_rate=1, grad_update_cnt_before_send=2, 
                  tensorflow_random_seed=54321, requested_gpu_vram_percent =(1.0/12.0), device_to_use=1,
-                 verbose=2, 
-                 ckpt_save_interval=50, weights_ckpt_file="/tmp/model.ckpt", load_ckpt_file_on_start=False,
-                 server_codename = ""):
+                 ckpt_save_interval=50, weights_ckpt_folder="/tmp/", load_ckpt_file_on_start=False,
+                 verbose=2, server_codename = ""):
         self.config = {
             'just_one_server': just_one_server,
             'grad_update_cnt_before_send': grad_update_cnt_before_send,
@@ -26,11 +25,10 @@ class ModDNN_ZMQ_Server:
             'requested_gpu_vram_percent': requested_gpu_vram_percent,
             'device_to_use': device_to_use,
             'verbose': verbose,
-            'weights_ckpt_file': weights_ckpt_file,
+            'weights_ckpt_file': weights_ckpt_folder,
             'ckpt_save_interval': ckpt_save_interval,
             'load_ckpt_file_on_start': load_ckpt_file_on_start,
         }
-        self.make_dirs_for_save_file(weights_ckpt_file)
         np.random.seed(self.config['tensorflow_random_seed'])
         self.weight_update_cnt = 0.0
         self.client_announce_cnt = 0.0
@@ -39,6 +37,9 @@ class ModDNN_ZMQ_Server:
         self.ZMQ_setup()
         self.server_uuid = statistics.get_new_uuid()
         print "======== SERVER using SERVER-UUID:  {} ========\n============================================".format(self.server_uuid)
+
+        self.config['weights_ckpt_file'] += str(self.server_uuid) + '_model.ckpt'
+        self.make_dirs_for_save_file(self.config['weights_ckpt_file'])
 
 
 ###############################################################################
@@ -93,7 +94,7 @@ class ModDNN_ZMQ_Server:
         self.saver = tf.train.Saver()
         tf.get_default_graph().finalize() # TODO see if we can still save/load weights with this here...
         
-        print "\nblah\n{}\n".format(self.config['load_ckpt_file_on_start'])
+        print "\n Load checkpoint File: {}\n".format(self.config['load_ckpt_file_on_start'])
         if self.config['load_ckpt_file_on_start']:
             self.load_weights()
     
@@ -114,7 +115,7 @@ class ModDNN_ZMQ_Server:
         save_path = self.saver.save(self.sess, self.config['weights_ckpt_file'])
         # save_path = self.saver.save(self.savable_variables, self.config['weights_ckpt_file'])
         if self.config['verbose'] >= 1:
-            print("Model saved in file: %s" % save_path)
+            print("-----> Model saved in file: %s" % save_path)
 
     def load_weights(self):
         print("attempting to load the weights")

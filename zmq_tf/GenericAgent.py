@@ -4,18 +4,19 @@ from DQN import DQN
 
 class Agent:
     def __init__(self, state_size=None, number_of_actions=1, just_greedy=False,
-                 epsilon=0.1, batch_size=200, discount=0.99, memory=10000, boltzman_softmax = False,
-                 save_name='basic', save_freq=10, annealing_size=100, use_experience_replay=True,
+                 epsilon=0.1, batch_size=200, memory=10000, boltzman_softmax = False,
+                 save_name='basic', annealing_size=100, use_experience_replay=True,
                  input_scaling_vector=None, allow_local_nn_weight_updates=False,
+                 learning_rate = 0.0002, momentum=0.0, discount = 0.90,
                  requested_gpu_vram_percent = 0.01, device_to_use = 0):
         self.state_size = state_size
         self.number_of_actions = number_of_actions
         self.epsilon = epsilon
         self.batch_size = batch_size
+        self.learning_rate = learning_rate
+        self.momentum = momentum
         self.discount = discount
         self.save_name = save_name
-        self.i = 1
-        self.save_freq = save_freq
         self.iterations = 0
         self.boltzman_softmax = boltzman_softmax
         self.annealing_size = annealing_size # number of steps, not number of games 
@@ -46,13 +47,17 @@ class Agent:
         self.model = DQN(
             input_dims = self.state_size[0],
             num_act = self.number_of_actions,
+            input_scaling_vector = self.input_scaling_vector,
+            lr = self.learning_rate, 
+            rms_momentum = self.momentum, 
+            discount = self.discount, 
             allow_local_nn_weight_updates = self.allow_local_nn_weight_updates,
             requested_gpu_vram_percent = self.requested_gpu_vram_percent,
             device_to_use = self.device_to_use)
         self.train_fn = self.model.train
         self.value_fn = self.model.q
 
-    def new_episode(self):
+    def reset_exp_db(self): # Was new_episode
         if self.use_exp_replay:
             self.states.append([])
             self.actions.append([])
@@ -71,10 +76,17 @@ class Agent:
             self.rewards = []
             self.terminal = []
             self.next_state = []
-        self.i += 1
-        if self.i % self.save_freq == 0:
-            self.model.save_weights('{}.h5'.format(self.save_name), True)
-                      
+    
+    def get_exp_db(self):
+        return [self.states, self.actions, self.rewards, self.terminal, self.next_state]
+    
+    def set_exp_db(self, new_db):
+        self.states = new_db[0]
+        self.actions = new_db[1]
+        self.rewards = new_db[2]
+        self.terminal = new_db[3]
+        self.next_state = new_db[4]
+        
     def end_episode(self):
         pass
 
@@ -101,7 +113,7 @@ class Agent:
     def calculate_epsilon(self):
         epsilon = None
         if self.is_eval:
-            epsilon = 0
+            epsilon = 1.0/40.0 # it still needs a small random to break out of bad spots. 
         elif self.just_greedy:
             epsilon = self.epsilon
         else:
@@ -110,15 +122,6 @@ class Agent:
         return epsilon
 
     def select_action(self, state):
-        # # This use to scale the input, but we have to change how we do this.  Maybe pass it into the DQN instead, so it's always happening
-        # if self.input_scaling_vector is not None:
-        #     # Scale the input to be between 0 and 1.  # Supposed to help with exploding gradients
-        #     if len(state) != len(self.input_scaling_vector): # Should probably be an assert instead
-        #         print "+=============+ ERROR +==============+\n scaling input doesn't have the same shape... :("
-        #     else:
-        #         # tmp = state
-        #         state = 1.0 * state / self.input_scaling_vector
-        #         # print "State {} became {}".format(tmp, state) # Debugging
         values = self.value_fn([state])
         if np.random.random() < self.calculate_epsilon():
             if self.boltzman_softmax:
@@ -130,18 +133,19 @@ class Agent:
             action = values.argmax()
         return action, values
 
-    def train(self):
+    def train(self, allow_update=True):
         self.iterations += 1
         if self.use_exp_replay:
             S, A, R, T, NS = self._calc_training_data__exp_rep()
         else:
             S, A, R, T, NS = self._calc_training_data_no_exp_rep()
-        cost = self.train_fn(np.array(S), np.array(A), np.array(R), np.array(T), np.array(NS))
+        cost = self.train_fn(np.array(S), np.array(A), np.array(R), np.array(T), np.array(NS), allow_update)
         return cost
 
     def _calc_training_data__exp_rep(self):
         N = len(self.states)
-
+        
+        # This sampled according to value.  But instead, we should select according to network error produced 
         # P = np.array([sum(episode)/len(episode) for episode in self.rewards]).astype(float)
         # P *= np.abs(P) # Square it (keeping the sign)
         # P -= np.min(P) # Set min to zero

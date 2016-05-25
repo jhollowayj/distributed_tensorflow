@@ -17,19 +17,24 @@ parser.add_argument('--world_id', '-wid', default=1, type=int, required=False, h
 parser.add_argument('--task_id', '-tid',  default=1, type=int, required=False, help="ID of the task(start/end positions) you want to use")
 parser.add_argument('--agent_id', '-aid', default=1, type=int, required=False, help="ID of the agent you want to use (nsew/sewn/ewns/etc")
 # AGENT
-parser.add_argument('--num_episodes', '-ne', default=5000,  type=int, required=False, help="")
+parser.add_argument('--num_steps', '-ns', default=750000,  type=int, required=False, help="")
 parser.add_argument('--annealing_size', '-an', default=1500,  type=int, required=False, help="")
 parser.add_argument('--epsilon', '-e', default=0.01,  type=float, required=False, help="")
 parser.add_argument('--boltzman_softmax', '-sm', default=False,  action='store_true', required=False, help="")
 parser.add_argument('--observer', '-o', default=False,  action='store_true', required=False, help="")
 parser.add_argument('--use_experience_replay', '-exp', default=False,  action='store_true', required=False, help="")
-parser.add_argument('--evaluate_peridocally', '-eval', default=False, action='store_true', required=False, help="")
+parser.add_argument('--ignore_evaluation_periods', '-no_eval', default=False, action='store_true', required=False, help="")
 parser.add_argument('--eval_episodes_between_evaluation', '-eval_steps', default=145, type=int, required=False,
                     help="Ignored if evaluate_peridocally is false.  Run this many episodes before evaluating.  150 seems to be fine (TODO Verify)")
-parser.add_argument('--eval_episodes_to_take', '-eval_len', default=5, type=int, required=False,
+parser.add_argument('--eval_episodes_to_take', '-eval_len', default=15, type=int, required=False,
                     help="Ignored if evaluate_peridocally is false.  defaults to (TODO find a good one)")
 parser.add_argument('--codename', '-name', default="", type=str, required=False, help="code name used to display in sql")
+parser.add_argument('--steps_til_train', '-stt', default=150, type=int)
 # NEURAL-NET       #Discount Factor, Learning Rate, etc. TODO
+parser.add_argument('--scale_input', default=False, action='store_true')
+parser.add_argument('--discount_rate', '-disc', default=0.90, type=float)
+parser.add_argument('--learning_rate', '-lr', default=0.0002, type=float, required=False, help="")
+parser.add_argument('--momentum', '-nnm', default=0.0, type=float, required=False, help="") # 0 works well.
 parser.add_argument('--allow_local_nn_weight_updates', '-nnu', default=False,  action='store_true', required=False, help="")
 parser.add_argument('--requested_gpu_vram_percent', '-vram', default=0.02,  type=float, required=False, help="")
 parser.add_argument('--device_to_use', '-device', default=1,  type=int, required=False, help="")
@@ -46,24 +51,24 @@ args = parser.parse_args()
 ### COMMAND LINE ARGUMENTS ###
 
 if args.observer:
-    args.evaluate_peridocally = True
+    args.ignore_evaluation_periods = False
     args.eval_episodes_between_evaluation = 10
     args.eval_episodes_to_take = 10
     args.allow_local_nn_weight_updates = False
     args.epsilon = 0
     args.annealing_size = 1
-    args.gradients_until_send = 10 + args.num_episodes
+    args.gradients_until_send = 10 + args.num_steps
 
 ### OTHER FUNCTIONS ###
 def send_gradients():
-    if args.verbose >= 1: print "     sending Gradients!!!!"
+    if args.verbose >= 2: print "     sending Gradients!!!!"
     s = time.time()
     grads = agent.get_gradients()
     tf_client.sendGradients(grads[0], NetworkType.World)
     tf_client.sendGradients(grads[1], NetworkType.Task)
     tf_client.sendGradients(grads[2], NetworkType.Agent)
     end = time.time()
-    if args.verbose >= 2: print "   Time to send gradients was {} seconds".format(end-s)
+    if args.verbose >= 3: print "   Time to send gradients was {} seconds".format(end-s)
 def cb(network_type, network_id):
     # print "CALLBACK: {} {}".format(network_type, network_id)
     ws = tf_client.requestNetworkWeights(network_type)
@@ -108,9 +113,12 @@ tf_client = client.ModDNN_ZMQ_Client(
 agent = GenericAgent.Agent(
     state_size=world.get_state_space(),
     number_of_actions=len(world.get_action_space()),
-    input_scaling_vector=world.get_state__maxes(),
+    input_scaling_vector=world.get_state__maxes() if args.scale_input else None, # Default None
     epsilon=args.epsilon,
     batch_size=250,
+    learning_rate = args.learning_rate,
+    momentum = args.momentum,
+    discount = args.discount_rate,
     boltzman_softmax= args.boltzman_softmax,
     use_experience_replay=args.use_experience_replay,
     annealing_size=int(args.annealing_size), # annealing_size=args.annealing_size,
@@ -159,69 +167,99 @@ if args.report_to_sql:
 if args.uuddlrlrba:
     uuddlrlrba_start_konami_cheat()
 
+
+
+### Helpers
+def printToConsole(is_eval, update_cnt, avgScore, max_q, cost, winning):
+    print "%s = stp:%6d:: Re:%5.1f, Max_Q:%7.3f, c:%9.4f, E:%4.3f, W?:%s %s" % \
+        ("{}.{}.{}".format(args.world_id, args.task_id, args.agent_id),
+        update_cnt, avgScore, max_q, cost, agent.calculate_epsilon(),
+        str(winning), "EVAL" if is_eval else "")
+        
+def Save_SQL_Evaluation(episode, num_steps, score, max_q, min_q, cost, did_win):
+    database.save_evaluation_episode(learner_uuid = learner_uuid, episode = episode,
+        steps_in_episode = num_steps, total_reward = score, q_max = max_q,cost = cost,
+        end_epsilon = agent.calculate_epsilon(), did_win = did_win, is_evaluation=True)
+        
+def Save_SQL_Training_Step(update_cnt, num_steps, score, max_q, min_q, cost, winning_cnt):
+    database.save_training_steps(learner_uuid = learner_uuid, update_cnt = update_cnt,
+        steps_in_training = num_steps, total_reward = world.get_score(), q_max = max_q,
+        cost = cost, end_epsilon = agent.calculate_epsilon(), number_wins = winning_cnt, is_evaluation=False)
+        
+def interact_with_server(send_grads=True):
+    if send_grads:
+        if args.verbose >= 1:
+            print "SENDING GRADIENTS (x3)"
+        send_gradients()
+    tf_client.poll_once() # calls the callback added above if weights available!
+    
+def resetVariables():
+    global max_q, min_q, sum_q, winning_cnt, running_score
+    agent.reset_exp_db() # go ahead and reset now.  Note:exp will span multiple games now.
+    max_q, min_q, sum_q = -np.Infinity, np.Infinity, 0.0
+    winning_cnt, running_score = 0, 0.0
+    
+    
+### Helpers
+def runWorldOneStep(max_q, min_q):
+    cur_state = world.get_state()
+    action, values = agent.select_action(np.array(cur_state))
+    next_state, reward, terminal = world.act(action)
+    agent.stash_new_exp(cur_state, action, reward, terminal, next_state)
+    return max(max_q, np.max(values)),  min(min_q, np.min(values))
+### Helpers
+
+
+
 ### RUN !!!!!!!!!!!!! ###
 def is_eval_episode(e):
     is_eval = None
-    if args.evaluate_peridocally:
-        period = args.eval_episodes_between_evaluation + args.eval_episodes_to_take
-        is_eval = e % period < args.eval_episodes_between_evaluation
+    if args.ignore_evaluation_periods:
+        is_eval = False # Just keep on learning
     else:
-        is_eval = False # Ignore it by default
+        period = args.eval_episodes_between_evaluation + args.eval_episodes_to_take
+        is_eval = e % period >= args.eval_episodes_between_evaluation
     return is_eval
 
 
-starttime = time.time()
-update_cnt = 1
-didwin, window = [], 25
-print "\n\n====\n Now testing\n====\n\n"
-for episode in xrange(args.num_episodes):
-    agent.set_evaluate_flag(is_eval_episode(episode))
-    done = False
+print "\n\n====\n Beginning regular training \n====\n\n"
+step_cnt, update_cnt, episode = 1, 1, 0
+max_q, min_q, sum_q, cost = -np.Infinity, np.Infinity, 0.0, 0.0
+winning_cnt, running_score = 0, 0.0
+agent.reset_exp_db()
+while step_cnt < args.num_steps:
     world.reset()
-    agent.new_episode()
-    max_q, min_q, sum_q = 0 - np.Infinity, np.Infinity, 0.0
-    actions, act_Vals = [0,0,0,0], [0,0,0,0] #HARD CODED
-    while world.is_running() and world.get_time() < args.max_steps_per_episode:
-        cur_state = world.get_state()
-        action, values = agent.select_action(np.array(cur_state))
-        next_state, reward, terminal = world.act(action)
-        agent.stash_new_exp(cur_state, action, reward, terminal, next_state)
+    episode += 1
+    if is_eval_episode(episode):
+        agent.set_evaluate_flag(True)
+        tmp_exp = agent.get_exp_db() # Save state
+        resetVariables()
+        while world.is_running() and world.get_time() < args.max_steps_per_episode:
+            max_q, min_q = runWorldOneStep(max_q, min_q)
+        # Test your network & Report
+        cost = agent.train(False)
+        if args.verbose >= 0:
+            printToConsole(True, episode, float(world.get_score()) / world.get_time(), max_q, cost,
+                           "Y ({:3})".format(world.get_time()) if not world.is_running() else "n (---)")
+        if args.report_to_sql:
+            Save_SQL_Evaluation(episode, world.get_time(), world.get_score(), max_q, min_q, cost, world.is_running())
+        agent.set_exp_db(tmp_exp)  # Restore state
+    else:
+        agent.set_evaluate_flag(False)
+        while world.is_running() and world.get_time() < args.max_steps_per_episode:
+            max_q, min_q = runWorldOneStep(max_q, min_q)
+            step_cnt += 1
+            if step_cnt % args.steps_til_train == 0:
+                update_cnt += 1
+                cost = agent.train()
+                if args.verbose >= 0:
+                    printToConsole(False, update_cnt, running_score/args.steps_til_train, max_q, cost, winning_cnt)
+                if args.report_to_sql:
+                    Save_SQL_Training_Step(update_cnt, args.steps_til_train, running_score, max_q, min_q, cost, winning_cnt)
+                if not args.ignore_server:
+                    interact_with_server(update_cnt % args.gradients_until_send == 0)
+                resetVariables()
 
-        max_q = max(max_q, np.max(values))
-        min_q = min(min_q, np.min(values))
-        act_Vals += values
-        actions[action] += 1
-
-    update_cnt += 1
-    cost = agent.train()
-    if not args.ignore_server:
-        if update_cnt % args.gradients_until_send == 0:
-            print "SENDING GRADIENTS (x3)"
-            send_gradients()
-        tf_client.poll_once() # calls the callback added above if weights available!
-
-    # REPORTTING
-    act_Vals = act_Vals[0]
-    frame = world.get_time()
-    if args.verbose >= 0:
-        ## DEBUGGING ##
-        # if episode % 15 == 0:
-        #     a, b = agent.select_action(np.array([1,2]))
-        #     print "{}\te{}\tcost:{}\t [1,2]: {} (4) {:15.6f}{:15.6f}{:15.6f}{:15.6f}".format("testing", episode, cost,
-        #         1+a, b[0][0], b[0][1], b[0][2], b[0][3])
-        ## DEBUGGING ##
-
-        print "%s = ep: %6d:: Re:%5.1f, QMa/Mi/%7.3f/%7.3f,  avg_NSEW:[%7.2f/ %7.2f/ %7.2f/ %7.2f], c: %9.4f, E: %4.3f, W?: %s" % \
-            ("{}.{}.{}".format(args.world_id, args.task_id, args.agent_id),
-            episode,  world.get_score(), max_q, min_q,
-            act_Vals[0]/frame, act_Vals[1]/frame, act_Vals[2]/frame, act_Vals[3]/frame,
-            (cost/frame), agent.calculate_epsilon(), "N" if world.is_running() else "Y")
-    if args.report_to_sql:
-        database.save_episode(
-            learner_uuid = learner_uuid, episode = episode, steps_in_episode = frame,
-            total_reward = world.get_score(), q_max = max_q, q_min = min_q,
-            avg_action_value_n = act_Vals[0]/frame, avg_action_value_e = act_Vals[1]/frame,
-            avg_action_value_s = act_Vals[2]/frame, avg_action_value_w = act_Vals[3]/frame,
-            mean_cost = cost/frame,  end_epsilon = agent.calculate_epsilon(),
-            did_win = not world.is_running(),
-            is_evaluation=is_eval_episode(episode))
+        running_score += float(world.get_score())
+        if world.get_time() != args.max_steps_per_episode:
+            winning_cnt += 1

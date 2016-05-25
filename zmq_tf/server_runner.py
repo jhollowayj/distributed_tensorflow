@@ -16,11 +16,11 @@ parser.add_argument('--requested_gpu_vram_percent', '-vram', default=0.05,  type
 parser.add_argument('--device_to_use', '-device', default=1,  type=int, required=False, help="")
 parser.add_argument('--verbose', '-v', default=2,  type=int, required=False, help="")
 parser.add_argument('--ckpt_save_interval', '-save', default=100,  type=int, required=False, help="")
-parser.add_argument('--weights_ckpt_file', '-f', default="/tmp/mod_dnn_research/model.ckpt", type=str, required=False, help="")
+parser.add_argument('--weights_ckpt_folder', '-f', default="/tmp/mod_dnn_research/", type=str, required=False, help="")
 parser.add_argument('--load_ckpt_file_on_start', '-load', default=False, action='store_true', required=False, help="")
 args = parser.parse_args()
 ### COMMAND LINE ARGUMENTS ###
-print "\n\nload? {}\n\n".format(args.load_ckpt_file_on_start)
+
 s = server.ModDNN_ZMQ_Server(
     just_one_server = args.just_one_server,
     grad_update_cnt_before_send = args.grad_update_cnt_before_send,
@@ -31,7 +31,7 @@ s = server.ModDNN_ZMQ_Server(
     device_to_use = args.device_to_use,
     verbose = args.verbose,
     ckpt_save_interval = args.ckpt_save_interval,
-    weights_ckpt_file = args.weights_ckpt_file,
+    weights_ckpt_folder = args.weights_ckpt_folder,
     load_ckpt_file_on_start = args.load_ckpt_file_on_start,
 )
 

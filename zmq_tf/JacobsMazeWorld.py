@@ -39,6 +39,7 @@ class JacobsMazeWorld(World):
         # Define start and end points
         self.startLocation = self.getStartPoint(self.task_id)
         self.endLocation = self.getGoalPoint(self.task_id)
+        self.saver_of_states = []
         self.restart()
         
     def restart(self):
@@ -63,13 +64,13 @@ class JacobsMazeWorld(World):
     def getStartPoint(self, taskId):
         return {
             1: ( 5,  5),
-            2: (10,  1),
-            3: ( 1, 10)
+            2: ( 1, 10),
+            3: (10,  1)
         }[taskId]
     def getGoalPoint(self, taskId):
         return {
-            1: ( 1,  1),
-            2: ( 1, 10),
+            1: ( 1, 1),
+            2: ( 8, 8),
             3: ( 3, 3)
         }[taskId]
 
@@ -219,6 +220,7 @@ class JacobsMazeWorld(World):
     def load(self):
         return # Do nothing for now
 
+
     #######################################################################
     
             
@@ -268,8 +270,8 @@ class JacobsMazeWorld(World):
             [w,o,w,o,w,o,w,o,w,o,o,w], # [w   w   w   w   w     w],
             [w,o,w,o,w,o,o,o,w,o,w,w], # [w   w   w       w   w w],
             [w,o,w,o,w,o,o,w,o,o,o,w], # [w   w   w     w       w],
-            [w,o,o,o,w,o,w,w,w,w,o,w], # [w       w   w w w w   w],
-            [w,o,w,w,w,o,w,o,o,o,o,w], # [w   w w w   w         w],
+            [w,o,o,o,w,o,w,w,o,w,o,w], # [w       w   w w   w   w],
+            [w,o,w,w,w,o,w,o,o,w,o,w], # [w   w w w   w     w   w],
             [w,o,w,o,o,o,o,o,w,o,o,w], # [w   w           w     w],
             [w,w,w,w,w,w,w,w,w,w,w,w]  # [w w w w w w w w w w w w]
         ])

@@ -146,8 +146,8 @@ class DQN:
         for i, accumulate_grad in enumerate(self._gradient_list):
             accumulate_grad += (episode_delta[i])
 
-    def clear_gradients(self):
-        self.num_grads_accumulated = 0 # TODO maybe move to TF, potentially could run faster...
+    def clear_gradients(self): # TODO maybe move to TF, potentially could run faster...
+        self.num_grads_accumulated = 0
         self._grad_w1 = np.zeros(([self.params['input_dims'], self.params['layer_1_hidden']])).astype(np.float32)
         self._grad_b1 = np.zeros(([self.params['layer_1_hidden']])).astype(np.float32)
         self._grad_w2 = np.zeros(([self.params['layer_1_hidden'], self.params['layer_2_hidden']])).astype(np.float32)
@@ -156,11 +156,12 @@ class DQN:
         self._grad_b3 = np.zeros(([self.params['num_act']])).astype(np.float32)
         self._gradient_list = [ self._grad_w1, self._grad_b1, self._grad_w2, self._grad_b2, self._grad_w3, self._grad_b3]
 
-    def get_and_clear_gradients(self):
+    def get_and_clear_gradients(self, avg=True):
         grads, num_grads_summed = self._gradient_list, self.num_grads_accumulated
         self.clear_gradients()
-        for grad in grads:              
-            grad /= num_grads_summed    
+        if avg:
+            for grad in grads:
+                grad /= num_grads_summed    
         return grads
 
     def train(self, states, actions, rewards, terminals, next_states, allow_update=True):

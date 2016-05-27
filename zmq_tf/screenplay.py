@@ -23,10 +23,14 @@ parser.add_argument('--doResearch', '-all', default=False, action='store_true', 
 parser.add_argument('--test_single_worlds', '-tsw', default=False, action='store_true', required=False)
 parser.add_argument('--comp_softmax', '-csm', default=False, action='store_true', required=False)
 parser.add_argument('--just_evaluators','-evals', default=False, action='store_true', required=False)
+parser.add_argument('--cheat_mode_on', '-cheat', default=False, action='store_true', required=False)
 if len(sys.argv)==1: # If no arguments, display the help and quit!
     parser.print_help()
     sys.exit(1)
 args = parser.parse_args()
+
+if args.cheat_mode_on:
+    _ = raw_input("Are you sure you want to enable cheat mode (ctrl-c to exit): [press any key to continue]")
 
 ###############################################################################
 ###############################################################################
@@ -47,25 +51,29 @@ path = "~/research/modularDNN_Practice/zmq_tf/"
 def launch_command(command):
     subprocess.call(open_terminal_command.format(command), shell=True)
 
-def launch_client(args, randEpsilon=True, longGame=True, randDevice=True):
+def launch_client(params, randEpsilon=True, longGame=True, randDevice=True):
     global gpu_id
     if randEpsilon:
-        args = "-e {} ".format(random.uniform(0.01,0.25)) + args
+        params = "-e {} ".format(random.uniform(0.01,0.18)) + params
     if longGame:
         if extraLongGame:
-            args = "-an 150000 -ns 75000000 " + args # 100x # probably too long...
+            params = "-an 150000 -ns 75000000 " + params # 100x # probably too long...
         else:
-            args = "-an 15000 -ns 7500000 " + args # 10x
+            params = "-an 15000 -ns 7500000 " + params # 10x
     if randDevice:
-        args = "-device {} ".format(gpus[gpu_id]) + args
+        params = "-device {} ".format(gpus[gpu_id]) + params
         gpu_id = (gpu_id + 1) % len(gpus)
-    print "Launching Client W/ Args: {}".format(args)
-    # time.sleep(0.2)
-    launch_command("python {}client_runner.py {}".format(path, args))
+    if args.cheat_mode_on:
+        params = params + " -udud"
+    print "Launching Client W/ params: {}".format(params)
+    time.sleep(0.15)
+    launch_command("python {}client_runner.py {}".format(path, params))
     
-def launch_server(args):
+def launch_server(params):
     time.sleep(2)
-    launch_command("python {}server_runner.py -device 0 {}".format(path, args))
+    params = params + " -device 0"
+    print "Launching server W/ params: {}".format(params)
+    launch_command("python {}server_runner.py {}".format(path, params))
     
 ###############################################################################
 
@@ -105,7 +113,7 @@ def test_mulitagent_multigame(games_settings=[[1,1,1]], num_players=[1], total_a
         grads, sends = calc_grad_sends_ratios(num_players[i])
         for slave in range(num_players[i] - 1):
             launch_client('{} -grads {} -npar {}'.format( id_args(game_setting), grads, total_agents)) # No sql, no name for slaves
-        launch_client('{} -grads {} -sql -npar {} --codename "{}"'.format( # TODO Add in -sql once it's working
+        launch_client('{} -grads {} -npar {} --codename "{}"'.format( # TODO Add in -sql once it's working
             id_args(game_setting), grads, total_agents,
             codename_creator(game_setting, total_agents, num_players[i])))
             
@@ -114,12 +122,12 @@ def test_mulitagent_multigame(games_settings=[[1,1,1]], num_players=[1], total_a
 
 def client_evaluators(games_settings=[[1,1,1]], total_agents=0):
     for game_setting in games_settings:
-        launch_client('{} -npar {}  -o --codename "{}.Evaluator"'.format( # TODO Add in -sql once it's working
+        launch_client('{} -npar {} -o --codename "{}.Evaluator"'.format( # TODO Add in -sql once it's working
             id_args(game_setting), total_agents,
             codename_creator(game_setting, total_agents, -1)))
 def client_evaluators_with_training(games_settings=[[1,1,1]], total_agents=0):
     for game_setting in games_settings:
-        launch_client('{} -npar {}  -grads 12 --codename "{}.Evaluator"'.format( # TODO Add in -sql once it's working
+        launch_client('{} -npar {} -grads 12 --codename "{}.Evaluator"'.format( # TODO Add in -sql once it's working
             id_args(game_setting), total_agents,
             codename_creator(game_setting, total_agents, -1)))
     
@@ -137,21 +145,22 @@ if args.agents2games1:
 if args.agents4games1:
     test_N_agent_1_game(8)
 if args.doResearch:
-    num_trainers_per_game = 3
+    num_trainers_per_game = 1
     train_games = [
         [1,1,1], [1,1,2],
         [1,2,2], [1,2,3],
         [1,3,1], [1,3,3]
+        
+        # ,[1,1,3], [1,2,1], [1,3,2]
     ]
-    test_games = [
-        [1,1,3],
-        [1,2,1],
-        [1,3,2]
-    ]
+    test_games = [ [1,1,3], [1,2,1], [1,3,2] ]
+    # test_games = [ ]
+
     total_agent_count = num_trainers_per_game*len(train_games) + len(test_games)
     # Launch! 
     test_mulitagent_multigame(train_games, [num_trainers_per_game]*len(train_games), total_agent_count, start_server=False)
     client_evaluators(test_games, total_agent_count) # Launch clients to evaluate unseen paths
+    #  -load 1a69903b-e40d-4cb7-9f50-26cbbce18805 # Add this if you want to load the parallel server uuid's old weights (weights are lost from tmp on computer restarts)
     launch_server('-v 3 -send {}'.format(num_trainers_per_game*len(train_games))) # Launch Server
 
 if args.just_evaluators:

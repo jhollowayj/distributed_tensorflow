@@ -17,7 +17,7 @@ parser.add_argument('--device_to_use', '-device', default=1,  type=int, required
 parser.add_argument('--verbose', '-v', default=2,  type=int, required=False, help="")
 parser.add_argument('--ckpt_save_interval', '-save', default=100,  type=int, required=False, help="")
 parser.add_argument('--weights_ckpt_folder', '-f', default="/tmp/mod_dnn_research/", type=str, required=False, help="")
-parser.add_argument('--load_ckpt_file_on_start', '-load', default=False, action='store_true', required=False, help="")
+parser.add_argument('--ckpt_file_to_load_on_start', '-load', default="", type=str, required=False, help="")
 args = parser.parse_args()
 ### COMMAND LINE ARGUMENTS ###
 
@@ -32,7 +32,7 @@ s = server.ModDNN_ZMQ_Server(
     verbose = args.verbose,
     ckpt_save_interval = args.ckpt_save_interval,
     weights_ckpt_folder = args.weights_ckpt_folder,
-    load_ckpt_file_on_start = args.load_ckpt_file_on_start,
+    ckpt_file_to_load_on_start = args.ckpt_file_to_load_on_start,
 )
 
 if args.test_client:

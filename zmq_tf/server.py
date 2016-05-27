@@ -9,12 +9,13 @@ from networks import NetworkType, Messages
 import errno    
 import os
 
+network_type_names = ["_", "world", ' task', 'agent']
 
 class ModDNN_ZMQ_Server:
     def __init__(self, just_one_server=True, serverType=NetworkType.World,
                  server_learning_rate=1, grad_update_cnt_before_send=2, 
                  tensorflow_random_seed=54321, requested_gpu_vram_percent =(1.0/12.0), device_to_use=1,
-                 ckpt_save_interval=50, weights_ckpt_folder="/tmp/", load_ckpt_file_on_start=False,
+                 ckpt_save_interval=50, weights_ckpt_folder="/tmp/", ckpt_file_to_load_on_start="",
                  verbose=2, server_codename = ""):
         self.config = {
             'just_one_server': just_one_server,
@@ -27,8 +28,15 @@ class ModDNN_ZMQ_Server:
             'verbose': verbose,
             'weights_ckpt_file': weights_ckpt_folder,
             'ckpt_save_interval': ckpt_save_interval,
-            'load_ckpt_file_on_start': load_ckpt_file_on_start,
+            'ckpt_file_to_load_on_start': ckpt_file_to_load_on_start, #load_ckpt_file_on_start,
         }
+
+        file_name = str(self.server_uuid) \
+                      if ckpt_file_to_load_on_start == "" else \
+                      self.config['ckpt_file_to_load_on_start']
+        self.config['weights_ckpt_file'] += file_name + '_model.ckpt'
+        self.make_dirs_for_save_file(self.config['weights_ckpt_file'])
+
         np.random.seed(self.config['tensorflow_random_seed'])
         self.weight_update_cnt = 0.0
         self.client_announce_cnt = 0.0
@@ -38,8 +46,6 @@ class ModDNN_ZMQ_Server:
         self.server_uuid = statistics.get_new_uuid()
         print "======== SERVER using SERVER-UUID:  {} ========\n============================================".format(self.server_uuid)
 
-        self.config['weights_ckpt_file'] += str(self.server_uuid) + '_model.ckpt'
-        self.make_dirs_for_save_file(self.config['weights_ckpt_file'])
 
 
 ###############################################################################
@@ -94,8 +100,8 @@ class ModDNN_ZMQ_Server:
         self.saver = tf.train.Saver()
         tf.get_default_graph().finalize() # TODO see if we can still save/load weights with this here...
         
-        print "\n Load checkpoint File: {}\n".format(self.config['load_ckpt_file_on_start'])
-        if self.config['load_ckpt_file_on_start']:
+        print "\n Load checkpoint File: {}\n".format(self.config['ckpt_file_to_load_on_start'] != "")
+        if self.config['ckpt_file_to_load_on_start'] != "":
             self.load_weights()
     
         if self.config['verbose'] >= 1:
@@ -121,7 +127,7 @@ class ModDNN_ZMQ_Server:
         print("attempting to load the weights")
         self.saver.restore(self.sess, self.config['weights_ckpt_file'])
         # self.saver.restore(self.savable_variables, self.config['weights_ckpt_file'])
-        print("Model restored.")
+        print("Model restored from {}".format(self.config['weights_ckpt_file']))
 
 ###############################################################################
 ###############################################################################
@@ -213,7 +219,7 @@ class ModDNN_ZMQ_Server:
     def handle_incoming_gradients(self, receiving_socket):
         # Update the weight_update_cnt
         self.weight_update_cnt += 1.0
-        if self.config['verbose'] >= 2: print "### recieving incoming gradients!  (# {})".format(int(self.weight_update_cnt / 3.0)),
+        if self.config['verbose'] >= 2: print "### recieving incoming gradients!  (#{:4d})".format(int(self.weight_update_cnt / 3.0)),
 
         # Receive the request
         network_type, network_id, compressed_gradients = \
@@ -223,15 +229,15 @@ class ModDNN_ZMQ_Server:
 
         plus, start = np.sum(gradients[0]), np.sum(self.nnetworks[network_type][network_id].get_model_weights()[0])
         if self.config['verbose'] >= 3:
-            print "||| Recieved Gradient ({}.{}) {:7.4} * {} = {:7.4}.  x+ {:7.4} => ".format(
-                network_type, network_id, plus, self.config['server_learning_rate'], plus * self.config['server_learning_rate'], start),
+            print "||| Recieved Gradient ({}.{}) {: 8.4f} * {} = {: 8.4f}.  x+ {: 11.4f} => ".format(
+                network_type_names[network_type], network_id, plus, self.config['server_learning_rate'], plus * self.config['server_learning_rate'], start),
 
         for g in gradients:
             g *= self.config['server_learning_rate']
 
         self.nnetworks[network_type][network_id].add_gradients(gradients)
         if self.config['verbose'] >= 3:
-            print "{:7.4}".format( np.sum(self.nnetworks[network_type][network_id].get_model_weights()[0])),
+            print "{: 11.4f}".format( np.sum(self.nnetworks[network_type][network_id].get_model_weights()[0])),
         if self.config['verbose'] >= 2: print
 
         # Save new weights if needed...

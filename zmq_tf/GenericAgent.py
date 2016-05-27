@@ -3,15 +3,16 @@ import numpy as np
 from DQN import DQN
 
 class Agent:
-    def __init__(self, state_size=None, number_of_actions=1, just_greedy=False,
-                 epsilon=0.1, batch_size=200, memory=10000, boltzman_softmax = False,
+    def __init__(self, state_size=None, number_of_actions=1, just_greedy=False, start_epsilon=1.0,
+                 end_epsilon=0.1, batch_size=200, memory=10000, boltzman_softmax = False,
                  save_name='basic', annealing_size=100, use_experience_replay=True,
                  input_scaling_vector=None, allow_local_nn_weight_updates=False,
                  learning_rate = 0.0002, momentum=0.0, discount = 0.90,
                  requested_gpu_vram_percent = 0.01, device_to_use = 0):
         self.state_size = state_size
         self.number_of_actions = number_of_actions
-        self.epsilon = epsilon
+        self.start_epsilon = start_epsilon
+        self.end_epsilon = end_epsilon
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.momentum = momentum
@@ -115,10 +116,12 @@ class Agent:
         if self.is_eval:
             epsilon = 1.0/40.0 # it still needs a small random to break out of bad spots. 
         elif self.just_greedy:
-            epsilon = self.epsilon
+            epsilon = self.end_epsilon
         else:
-            epsilon = max(self.epsilon, 1-float(self.iterations) / self.annealing_size)
             # epsilon = max(self.epsilon, 1-float(self.iterations % (self.annealing_size*4.5)) / self.annealing_size)
+            percent = 1 - min(1, max(0, float(self.iterations) / self.annealing_size)) # 0-1, linear
+            range = self.start_epsilon - self.end_epsilon
+            epsilon = self.end_epsilon + (percent * range)
         return epsilon
 
     def select_action(self, state):
@@ -214,7 +217,7 @@ class Agent:
 ###############################################################################
 
     index_state_2_1 = None
-    def train_everything(self, num_episodes, state, action, next_state, reward, terminal):
+    def train_everything(self, num_episodes, state, action, next_state, reward, terminal, grads=False):
         S = np.array(state)
         A = np.array([self.onehot(act) for act in action])
         R = np.array(reward)
@@ -229,14 +232,13 @@ class Agent:
         import time
         t, onek = time.time(), []
         for episode in xrange(num_episodes):    
-            cost = self.train_fn(S, A, R, T, NS, episode % 100 == 0)
+            cost = self.train_fn(S, A, R, T, NS, grads)
             if episode % 15 == 0:
                 a, b = self.select_action(np.array([1,2]))
-                print "{}\te{}\tcost:{}\t [1,2]: {} (4) {:15.10f}{:15.10f}{:15.10f}{:15.10f}  -- {}".format("testing", episode, cost, 
-                        1+a, b[0][0], b[0][1], b[0][2], b[0][3], b[0].shape)
+                print "{}\te{:4}\tcost:{:15.10}".format("testing", episode, cost)
                 if episode % 1000 == 0:
                     onek.append(time.time() - t)
         e = time.time()
-        print "\n\nTime:{}".format(e - t)
-        for i in range(len(onek)):
-            print "    {} : {}".format(1000*i, onek[i])
+        # print "\n\nTime:{}".format(e - t)
+        # for i in range(len(onek)):
+        #     print "    {} : {}".format(1000*i, onek[i])

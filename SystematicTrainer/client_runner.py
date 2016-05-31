@@ -11,6 +11,7 @@ import argparse
 parser = argparse.ArgumentParser()
 # WORLD
 parser.add_argument('--random_starting_location', '-rand_start', default=True, action='store_true')
+parser.add_argument('--onehot_state', default=False, action='store_true')
 # NEURAL-NET
 parser.add_argument('--scale_input', default=False, action='store_true')
 parser.add_argument('--discount_rate', '-disc', default=0.80, type=float)
@@ -23,8 +24,15 @@ args = parser.parse_args()
 ### COMMAND LINE ARGUMENTS ###
 
 ### INITIALIZE OBJECTS ###
-world = JacobsMazeWorld.JacobsMazeWorld(1,1,1,True, True)
+world = JacobsMazeWorld.JacobsMazeWorld(2,1,1,random_start=True, onehot_state = args.onehot_state)
 
+# x = 6
+# y = 6
+# print world.act(0, x, y)
+# print world.act(1, x, y)
+# print world.act(2, x, y)
+# print world.act(3, x, y)
+# exit()
 agent = GenericAgent.Agent(
     state_size=world.get_state_space(),
     number_of_actions=len(world.get_action_space()),
@@ -45,7 +53,7 @@ print "\n\nCodename: {}".format("Systematic_Trainer")
 a = 1
 b = 3
 games = [
-    [3,3,1]
+    [2,2,1]
     
     # [1,1,1],
     # [1,1,2],
@@ -107,7 +115,7 @@ times = [5] * len(train_layer_flags)
 def Train(ids, train_layer_flags, max_train_time = 60):
     world = JacobsMazeWorld.JacobsMazeWorld( ids[0], ids[1], ids[2],
                                              random_start = args.random_starting_location,
-                                             onehot_state=True)
+                                             onehot_state = args.onehot_state)
     # tf_client = client.ModDNN_ZMQ_Client(ids[0], ids[1], ids[2])
 
     # request weights

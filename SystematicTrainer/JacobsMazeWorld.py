@@ -113,6 +113,8 @@ class JacobsMazeWorld(World):
 
         if desiredCellType != maze_object.wall: # move if not a wall.
             self.agent_location = desiredCell
+        else:
+            self.agent_location = (cur_x, cur_y)
         # Terminal?
         if self.endLocation == desiredCell:
             terminal = True

@@ -44,7 +44,7 @@ pause = False
 open_terminal_command = "gnome-terminal -x bash -c 'pwd; {}{}'".format(
     '{}',
     '; echo "\nPress any key to close"; read' if pause else '')
-path = "~/research/modularDNN_Practice/zmq_tf/"
+path = "~/research/modularDNN_Practice/"
 # execute_command = 'ls; sleep 5'
 
 ###############################################################################
@@ -113,7 +113,7 @@ def test_mulitagent_multigame(games_settings=[[1,1,1]], num_players=[1], total_a
         grads, sends = calc_grad_sends_ratios(num_players[i])
         for slave in range(num_players[i] - 1):
             launch_client('{} -grads {} -npar {}'.format( id_args(game_setting), grads, total_agents)) # No sql, no name for slaves
-        launch_client('{} -grads {} -npar {} --codename "{}"'.format( # TODO Add in -sql once it's working
+        launch_client('{} -grads {} -sql -npar {} --codename "{}"'.format( # TODO Add in -sql once it's working
             id_args(game_setting), grads, total_agents,
             codename_creator(game_setting, total_agents, num_players[i])))
             
@@ -122,7 +122,7 @@ def test_mulitagent_multigame(games_settings=[[1,1,1]], num_players=[1], total_a
 
 def client_evaluators(games_settings=[[1,1,1]], total_agents=0):
     for game_setting in games_settings:
-        launch_client('{} -npar {} -o --codename "{}.Evaluator"'.format( # TODO Add in -sql once it's working
+        launch_client('{} -npar {} -o -sql --codename "{}.Evaluator"'.format( # TODO Add in -sql once it's working
             id_args(game_setting), total_agents,
             codename_creator(game_setting, total_agents, -1)))
 def client_evaluators_with_training(games_settings=[[1,1,1]], total_agents=0):
@@ -150,10 +150,15 @@ if args.doResearch:
         [1,1,1], [1,1,2],
         [1,2,2], [1,2,3],
         [1,3,1], [1,3,3]
+        ,
+        [2,1,1], [2,1,2],
+        [2,2,2], [2,2,3],
+        [2,3,1], [2,3,3]
         
         # ,[1,1,3], [1,2,1], [1,3,2]
     ]
-    test_games = [ [1,1,3], [1,2,1], [1,3,2] ]
+    test_games = [ [1,1,3], [1,2,1], [1,3,2],
+                   [2,1,3], [2,2,1], [2,3,2] ]
     # test_games = [ ]
 
     total_agent_count = num_trainers_per_game*len(train_games) + len(test_games)

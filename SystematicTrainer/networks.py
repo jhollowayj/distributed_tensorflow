@@ -114,7 +114,7 @@ class World1(Shared_Model_Object):
         self.assigns = [self.assign_w1, self.assign_b1]
         self.assign_adds = [self.assign_add_w1, self.assign_add_b1]
         self.assigns_placeholders = [self.assign_w1_placeholder, self.assign_b1_placeholder]
-
+        
 class World2(Shared_Model_Object):
     '''Takes input and expands to 1k nodes.  We can build this up later.
     Input size is standard for worlds, output is standard for worlds

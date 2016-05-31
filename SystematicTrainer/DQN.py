@@ -2,8 +2,6 @@ import numpy as np
 import tensorflow as tf
 import time
 
-import RProp
-
 class DQN:
     def __init__(self, input_dims = 2, num_act = 4,
             eps = 1.0, discount = 0.90, lr = 0.0002,
@@ -14,8 +12,8 @@ class DQN:
             device_to_use=0, verbose = 0):
         self.params = {
             'input_dims': input_dims,
-            'layer_1_hidden': 1000,
-            'layer_2_hidden': 1000,
+            'layer_1_hidden': 10000,
+            'layer_2_hidden': 10000,
             'num_act': num_act,
             'discount': discount,
             'lr': lr,
@@ -74,7 +72,6 @@ class DQN:
             ##
 
             ### Gradients ###
-            self.clear_gradients()
             self.assign_w1_placeholder = tf.placeholder(tf.float32, shape=[self.params['input_dims'], layer_1_hidden])
             self.assign_b1_placeholder = tf.placeholder(tf.float32, shape=[layer_1_hidden])
             self.assign_w2_placeholder = tf.placeholder(tf.float32, shape=[layer_1_hidden, layer_2_hidden])
@@ -92,33 +89,23 @@ class DQN:
             self.assign_placeholders = [self.assign_w1_placeholder, self.assign_b1_placeholder, self.assign_w2_placeholder, self.assign_b2_placeholder, self.assign_w3_placeholder, self.assign_b3_placeholder]
             self.assign_new_weights = [self.assign_w1, self.assign_b1, self.assign_w2, self.assign_b2, self.assign_w3, self.assign_b3]
             ### end Gradients ###
+
+            self.trainable_layers = [self.w1, self.b1, self.w2, self.b2, self.w3, self.b3] # default to everything
             
             #Q,Cost,Optimizer
             self.discount = tf.constant(self.params['discount'], name="nn_discount")
             self.yj = tf.add(self.rewards, tf.mul(1.0-self.terminals, tf.mul(self.discount, self.q_t)), name="nn_yj_whatever-that-is")
             self.Q_pred = tf.reduce_sum(tf.mul(self.y,self.actions), reduction_indices=1, name="nn_q_pred")
             self.cost = tf.reduce_sum(tf.pow(tf.sub(self.yj, self.Q_pred), 2), name="nn_cost")
-
-            ## DEBUGGING ##
-            # with tf.device("/cpu:0"):
-            #     self.global_step = tf.Variable(0, name='global_step', trainable=False)
-
-            # with tf.device("/cpu:0"):
-            #     self.rmsprop_min = RProp.RPropOptimizer().minimize(self.cost, global_step=self.global_step)
-    
-            # self.learning_rate_annealing_rate = (self.params['learning_rate_start'] - self.params['learning_rate_end']) / self.params['learning_rate_decay']
-            # self.learning_rate = tf.maximum(self.params['learning_rate_end'],
-            #                                 self.params['learning_rate_start'] - (self.learning_rate_annealing_rate * tf.to_float(self.global_step)))
-            # self.rmsprop_min = tf.train.RMSPropOptimizer(self.learning_rate,self.params['rms_decay'],0.0,self.params['rms_eps']).minimize(self.cost, global_step=self.global_step)
-            ##  END DEBUGGING ##
             
-            self.rmsprop_min = tf.train.RMSPropOptimizer(learning_rate=self.params['lr'],
+            self.rmsprop_opt = tf.train.RMSPropOptimizer(learning_rate=self.params['lr'],
                                                          decay=self.params['rms_decay'],
                                                          momentum=self.params['rms_momentum'],
-                                                         epsilon=self.params['rms_eps']).minimize(self.cost)
+                                                         epsilon=self.params['rms_eps'])
+            self.rmsprop_min = self.rmsprop_opt.minimize(self.cost, var_list=self.trainable_layers)
 
         self.sess.run(tf.initialize_all_variables())
-        tf.get_default_graph().finalize() # Disallow any more nodes to be added. Helps for debugging later
+        # tf.get_default_graph().finalize() # Disallow any more nodes to be added. Helps for debugging later
         print "###\n### Networks initialized\n### Ready to begin\n###"
     
     def set_all_weights(self, allweights):
@@ -139,55 +126,33 @@ class DQN:
         elif network_type == 3: # Agent
             self.sess.run([self.assign_w3, self.assign_b3], feed_dict={self.assign_w3_placeholder:weights[0], self.assign_b3_placeholder:weights[1]})
 
-    def stash_gradients(self, episode_delta):
-        # print "Stashing Gradient: {}".format(episode_delta[0][0][0])
-        self.num_grads_accumulated += 1
-        for i, accumulate_grad in enumerate(self._gradient_list):
-            accumulate_grad += (episode_delta[i])
-
-    def clear_gradients(self): # TODO maybe move to TF, potentially could run faster...
-        self.num_grads_accumulated = 0
-        self._grad_w1 = np.zeros(([self.params['input_dims'], self.params['layer_1_hidden']])).astype(np.float32)
-        self._grad_b1 = np.zeros(([self.params['layer_1_hidden']])).astype(np.float32)
-        self._grad_w2 = np.zeros(([self.params['layer_1_hidden'], self.params['layer_2_hidden']])).astype(np.float32)
-        self._grad_b2 = np.zeros(([self.params['layer_2_hidden']])).astype(np.float32)
-        self._grad_w3 = np.zeros(([self.params['layer_2_hidden'], self.params['num_act']])).astype(np.float32)
-        self._grad_b3 = np.zeros(([self.params['num_act']])).astype(np.float32)
-        self._gradient_list = [ self._grad_w1, self._grad_b1, self._grad_w2, self._grad_b2, self._grad_w3, self._grad_b3]
-
-    def get_and_clear_gradients(self, avg=True):
-        grads, num_grads_summed = self._gradient_list, self.num_grads_accumulated
-        self.clear_gradients()
-        if avg:
-            for grad in grads:
-                grad /= num_grads_summed    
-        return grads
-
+    def stash_original_weights(self):
+        self.originals = self.sess.run(self.all_layers)
+        
+    def get_delta_weights(self):
+        new_weights = self.sess.run(self.all_layers)
+        return [new_weights[i] - self.originals[i] for i in range(len(self.originals))]
+        
     def train(self, states, actions, rewards, terminals, next_states, allow_update=True):
         q_target_max = np.amax(self.q(next_states), axis=1) # Pick the next state's best value to use in the reward (curRew + discount*(nextRew))
-
-        start_weights = self.sess.run(self.all_layers)
-        feed_dict={self.x: self.scale_state_input(states), self.q_t: q_target_max, self.actions: actions, self.rewards: rewards, self.terminals:terminals}
+        feed_dict={self.x: states, self.q_t: q_target_max, self.actions: actions, self.rewards: rewards, self.terminals:terminals}
         _, costs = self.sess.run([self.rmsprop_min, self.cost], feed_dict=feed_dict)
-        end_weights = self.sess.run(self.all_layers)
-
-        if allow_update:
-            self.stash_gradients([end_weights[i] - start_weights[i] for i in range(len(start_weights))])
-        if not self.params['allow_local_nn_weight_updates'] or not allow_update:
-            self.set_all_weights(start_weights)
-
         return costs
         
     def q(self, states):
-        return self.sess.run(self.y, feed_dict={self.x: self.scale_state_input(states)})
+        return self.sess.run(self.y, feed_dict={self.x: states})
     
-    def scale_state_input(self, state_to_scale):
-        if self.params['input_scaling_vector'] is None:
-            return state_to_scale
-        else:
-            return np.array(state_to_scale) / self.params['input_scaling_vector']
-    
-    def save_weights(self, name, boolean_for_something):
-        # SAVE WEIGHTS?!?  CLIENTS DON'T GET TO SAVE WEIGHTS.  THOSE COME FROM THE SERVER!
-        pass
-        
+    def set_train_layer_flags(self, locks):
+        self.trainable_layers = []
+        print "Trainable layers:", 
+        if locks[0]:
+            self.trainable_layers += [self.w1, self.b1]
+            print "w1, b1",
+        if locks[1]:
+            self.trainable_layers += [self.w2, self.b2]
+            print "w2, b2",
+        if locks[2]:
+            self.trainable_layers += [self.w3, self.b3]
+            print "w3, b3",
+        self.rmsprop_min = self.rmsprop_opt.minimize(self.cost, var_list=self.trainable_layers)
+        print ""

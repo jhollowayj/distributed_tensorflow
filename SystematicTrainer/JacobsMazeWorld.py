@@ -180,55 +180,63 @@ class JacobsMazeWorld(World):
 
     def buildMaze_staggered(self):
         w, o = maze_object.wall, maze_object.open
-        return np.array([
-            [w,w,w,w,w,w,w,w,w,w,w,w], # [w w w w w w w w w w w w]
-            [w,o,o,o,w,o,o,o,w,o,o,w], # [w       w       w     w]
-            [w,o,w,o,o,o,w,o,o,o,w,w], # [w   w       w       w w]
-            [w,o,o,o,w,o,o,o,w,o,o,w], # [w       w       w     w]
-            [w,o,w,o,o,o,w,o,o,o,w,w], # [w   w       w       w w]
-            [w,o,o,o,w,o,o,o,w,o,o,w], # [w       w       w     w]
-            [w,o,w,o,o,o,w,o,o,o,w,w], # [w   w       w       w w]
-            [w,o,o,o,w,o,o,o,w,o,o,w], # [w       w       w     w]
-            [w,o,w,o,o,o,w,o,o,o,w,w], # [w   w       w       w w]
-            [w,o,o,o,w,o,o,o,w,o,o,w], # [w       w       w     w]
-            [w,o,w,o,o,o,w,o,o,o,w,w], # [w   w       w       w w]
-            [w,w,w,w,w,w,w,w,w,w,w,w]  # [w w w w w w w w w w w w]
+        return np.array([              #      1 2 3 4 5 6 7 8 9 0
+            [w,w,w,w,w,w,w,w,w,w,w,w], #   [w w w w w w w w w w w w]
+            [w,o,o,o,w,o,o,o,w,o,o,w], # 1 [w       w       w     w]
+            [w,o,w,o,o,o,w,o,o,o,w,w], # 2 [w   w       w       w w]
+            [w,o,o,o,w,o,o,o,w,o,o,w], # 3 [w       w       w     w]
+            [w,o,w,o,o,o,w,o,o,o,w,w], # 4 [w   w       w       w w]
+            [w,o,o,o,w,o,o,o,w,o,o,w], # 5 [w       w       w     w]
+            [w,o,w,o,o,o,w,o,o,o,w,w], # 6 [w   w       w       w w]
+            [w,o,o,o,w,o,o,o,w,o,o,w], # 7 [w       w       w     w]
+            [w,o,w,o,o,o,w,o,o,o,w,w], # 8 [w   w       w       w w]
+            [w,o,o,o,w,o,o,o,w,o,o,w], # 9 [w       w       w     w]
+            [w,o,w,o,o,o,w,o,o,o,w,w], # 0 [w   w       w       w w]
+            [w,w,w,w,w,w,w,w,w,w,w,w]  #   [w w w w w w w w w w w w]
         ])
         
     def buildMaze_orgMaze(self):
         w, o, c = maze_object.wall, maze_object.open, maze_object.coin
-        return np.array([
-            [w,w,w,w,w,w,w,w,w,w,w,w], # [w w w w w w w w w w w w],
-            [w,o,o,o,o,o,o,o,o,o,o,w], # [w                     w],
-            [w,o,w,w,w,w,w,w,w,w,o,w], # [w   w w w w w w w w   w],
-            [w,o,w,o,o,o,w,o,o,o,o,w], # [w   w       w         w],
-            [w,o,w,o,w,o,w,o,w,w,o,w], # [w   w   w   w   w w   w],
-            [w,o,w,o,w,o,w,o,w,o,o,w], # [w   w   w   w   w     w],
-            [w,o,w,o,w,o,o,o,w,o,w,w], # [w   w   w       w   w w],
-            [w,o,w,o,w,o,o,w,o,o,o,w], # [w   w   w     w       w],
-            [w,o,o,o,w,o,w,w,o,w,o,w], # [w       w   w w   w   w],
-            [w,o,w,w,w,o,w,o,o,w,o,w], # [w   w w w   w     w   w],
-            [w,o,w,o,o,o,o,o,w,o,o,w], # [w   w           w     w],
-            [w,w,w,w,w,w,w,w,w,w,w,w]  # [w w w w w w w w w w w w]
+        return np.array([              #      1 2 3 4 5 6 7 8 9 0
+            [w,w,w,w,w,w,w,w,w,w,w,w], #   [w w w w w w w w w w w w],
+            [w,o,o,o,o,o,o,o,o,o,o,w], # 1 [w                     w],
+            [w,o,w,w,w,w,w,w,w,w,o,w], # 2 [w   w w w w w w w w   w],
+            [w,o,w,o,o,o,w,o,o,o,o,w], # 3 [w   w       w         w],
+            [w,o,w,o,w,o,w,o,w,w,o,w], # 4 [w   w   w   w   w w   w],
+            [w,o,w,o,w,o,w,o,w,o,o,w], # 5 [w   w   w   w   w     w],
+            [w,o,w,o,w,o,o,o,w,o,w,w], # 6 [w   w   w       w   w w],
+            [w,o,w,o,w,o,o,w,o,o,o,w], # 7 [w   w   w     w       w],
+            [w,o,o,o,w,o,w,w,o,w,o,w], # 8 [w       w   w w   w   w],
+            [w,o,w,w,w,o,w,o,o,w,o,w], # 9 [w   w w w   w     w   w],
+            [w,o,w,o,o,o,o,o,w,o,o,w], # 0 [w   w           w     w],
+            [w,w,w,w,w,w,w,w,w,w,w,w]  #   [w w w w w w w w w w w w]
         ])
 
     def buildMaze_upRight(self):
         w, o, c = maze_object.wall, maze_object.open, maze_object.coin
-        return np.array([
-            [w,w,w,w,w,w,w,w,w,w,w,w],  # [w w w w w w w w w w w w]
-            [w,o,w,o,o,o,o,o,o,o,o,w],  # [w   w                 w]
-            [w,o,w,w,w,o,w,w,w,w,w,w],  # [w   w w w   w w w w w w]
-            [w,o,w,o,o,o,o,o,o,w,o,w],  # [w   w             w   w]
-            [w,o,o,o,w,w,w,w,o,w,o,w],  # [w       w w w w   w   w]
-            [w,o,w,o,w,o,o,o,o,o,o,w],  # [w   w   w             w]
-            [w,o,o,o,o,o,o,w,o,w,o,w],  # [w             w   w   w]
-            [w,o,w,o,w,w,w,w,o,o,o,w],  # [w   w   w w w w       w]
-            [w,o,w,o,o,o,o,o,o,w,o,w],  # [w   w             w   w]
-            [w,w,w,w,w,w,o,w,w,w,o,w],  # [w w w w w w   w w w   w]
-            [w,o,o,o,o,o,o,o,o,w,o,w],  # [w                 w   w]
-            [w,w,w,w,w,w,w,w,w,w,w,w]   # [w w w w w w w w w w w w]
+        return np.array([              #      1 2 3 4 5 6 7 8 9 0
+            [w,w,w,w,w,w,w,w,w,w,w,w], #   [w w w w w w w w w w w w]
+            [w,o,w,o,o,o,o,o,o,o,o,w], # 1 [w   w                 w]
+            [w,o,w,w,w,o,w,w,w,w,w,w], # 2 [w   w w w   w w w w w w]
+            [w,o,w,o,o,o,o,o,o,w,o,w], # 3 [w   w             w   w]
+            [w,o,o,o,w,w,w,w,o,w,o,w], # 4 [w       w w w w   w   w]
+            [w,o,w,o,w,o,o,o,o,o,o,w], # 5 [w   w   w             w]
+            [w,o,o,o,o,o,o,w,o,w,o,w], # 6 [w             w   w   w]
+            [w,o,w,o,w,w,w,w,o,o,o,w], # 7 [w   w   w w w w       w]
+            [w,o,w,o,o,o,o,o,o,w,o,w], # 8 [w   w             w   w]
+            [w,w,w,w,w,w,o,w,w,w,o,w], # 9 [w w w w w w   w w w   w]
+            [w,o,o,o,o,o,o,o,o,w,o,w], # 0 [w                 w   w]
+            [w,w,w,w,w,w,w,w,w,w,w,w]  #   [w w w w w w w w w w w w]
         ])
 
+
+    def get_walls(self):
+        arr = []
+        for r in range(10):
+            for c in range(10):
+                if self.maze[r+1][c+1] == maze_object.wall:
+                    arr.append([r,c])
+        return arr
     #######################################################################
 if __name__ == "__main__":
     m = JacobsMazeWorld()

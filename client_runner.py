@@ -57,10 +57,10 @@ if args.observer:
     args.ignore_evaluation_periods = False
     args.eval_episodes_between_evaluation = 10
     args.eval_episodes_to_take = 10
-    args.allow_local_nn_weight_updates = False
+    args.allow_local_nn_weight_updates = True
     args.epsilon = 0.08 # give him a little bit of random to get out of bad policies
     args.annealing_size = 1
-    args.gradients_until_send = 10 + args.num_steps
+    args.gradients_until_send = 5
 if args.uuddlrlrba:
     args.start_epsilon = 0.5
 else:
@@ -77,7 +77,7 @@ def send_gradients():
     end = time.time()
     if args.verbose >= 3: print "   Time to send gradients was {} seconds".format(end-s)
 def cb(network_type, network_id):
-    # print "CALLBACK: {} {}".format(network_type, network_id)
+    print "CALLBACK: {} {}".format(network_type, network_id)
     ws = tf_client.requestNetworkWeights(network_type)
     agent.set_weights(ws, network_type)
 
@@ -217,7 +217,7 @@ if args.report_to_sql:
         agent_id=args.agent_id,
         max_episode_count=args.max_steps_per_episode,
         annealing_size=args.annealing_size,
-        final_epsilon=args.epsilon,
+        final_epsilon=args.end_epsilon,
         num_parallel_learners=args.num_parallel_learners,
         using_experience_replay=agent.is_using_experience_replay(),
         codename=args.codename)

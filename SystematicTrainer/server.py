@@ -2,7 +2,6 @@ import zmq
 import time
 import numpy as np
 import tensorflow as tf
-import statistics
 import networks as networks, Ops
 from networks import NetworkType, Messages
 
@@ -13,9 +12,9 @@ network_type_names = ["_", "world", ' task', 'agent']
 
 class ModDNN_ZMQ_Server:
     def __init__(self, just_one_server=True, serverType=NetworkType.World,
-                 server_learning_rate=1, grad_update_cnt_before_send=2, 
+                 server_learning_rate=1, grad_update_cnt_before_send=1, 
                  tensorflow_random_seed=54321, requested_gpu_vram_percent =(1.0/12.0), device_to_use=1,
-                 ckpt_save_interval=50, weights_ckpt_folder="/tmp/", ckpt_file_to_load_on_start="",
+                 ckpt_save_interval=1, weights_ckpt_folder="/tmp/", ckpt_file_to_load_on_start="",
                  verbose=2, server_codename = ""):
         self.config = {
             'just_one_server': just_one_server,
@@ -31,20 +30,13 @@ class ModDNN_ZMQ_Server:
             'ckpt_file_to_load_on_start': ckpt_file_to_load_on_start, #load_ckpt_file_on_start,
         }
 
-        self.server_uuid = statistics.get_new_uuid() if ckpt_file_to_load_on_start == "" else ckpt_file_to_load_on_start # does that work?
-        print "======== SERVER using SERVER-UUID:  {} ========\n============================================".format(self.server_uuid)
-
-        file_name = str(self.server_uuid) \
-                      if ckpt_file_to_load_on_start == "" else \
-                      self.config['ckpt_file_to_load_on_start']
-        self.config['weights_ckpt_file'] += file_name + '_model.ckpt'
+        self.config['weights_ckpt_file'] += 'Systematic_Trainer' + '_model.ckpt'
         self.make_dirs_for_save_file(self.config['weights_ckpt_file'])
 
         np.random.seed(self.config['tensorflow_random_seed'])
         self.weight_update_cnt = 0.0
         self.client_announce_cnt = 0.0
         self.buildNetworks()
-        print "Servver setup:: ##################### ", self.nnetworks[NetworkType.World][1].get_model_weights()[0].shape
         self.ZMQ_setup()
 
 
@@ -271,11 +263,14 @@ class ModDNN_ZMQ_Server:
     
     def poll_once(self):
         # check for new request or gradients
-        socks = dict( self.poller.poll( 500 ) )
+        socks = dict( self.poller.poll( 1000 ) )
         # print "server Polling results: {}".format(socks)
         if self.param_rr in socks:
+            # print "handling network weight request"
             self.handle_client_request(self.param_rr)
+            
         if self.grad_recv in socks:
+            print "gradients are inbound"
             self.handle_incoming_gradients(self.grad_recv)
         
         # Maybe save the weights to disk periodically?
@@ -301,6 +296,7 @@ class ModDNN_ZMQ_Server:
                 print "handling network weight request"
                 self.handle_client_request(self.param_rr)
             if self.grad_recv in socks:
+                print "gradients are inbound"
                 self.handle_incoming_gradients(self.grad_recv)
 
             # Send out fake messages

@@ -10,10 +10,11 @@ class DQN:
             allow_local_nn_weight_updates=False,
             requested_gpu_vram_percent=0.01,
             device_to_use=0, verbose = 0):
+        print "Incoming input_dims param: {}".format(input_dims)
         self.params = {
             'input_dims': input_dims,
-            'layer_1_hidden': 10000,
-            'layer_2_hidden': 10000,
+            'layer_1_hidden': 1000,
+            'layer_2_hidden': 1000,
             'num_act': num_act,
             'discount': discount,
             'lr': lr,

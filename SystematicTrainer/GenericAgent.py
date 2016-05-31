@@ -48,7 +48,7 @@ class Agent:
     
     def build_model(self):
         self.model = DQN(
-            input_dims = self.state_size[0],
+            input_dims = self.state_size,
             num_act = self.number_of_actions,
             input_scaling_vector = self.input_scaling_vector,
             lr = self.learning_rate, 
@@ -197,21 +197,25 @@ class Agent:
         vals = np.zeros((10,10,4)).astype(np.float32)
         for x in range(10):
             for y in range(10):
-                vals[x][y] = self.value_fn([[x+1, y+1]])[0]
+                vals[x][y] = self.value_fn([world.get_state(x+1, y+1)])[0]
                 
         max = np.zeros((10,10))
+        dir = np.zeros((10,10))
+        difs= np.zeros((10,10))
         for r in range(10):
             for c in range(10):
-                # max[r][c] = int(np.argmax(vals[r][c]))
+                dir[r][c] = int(np.argmax(vals[r][c]))
                 max[r][c] = np.max(vals[r][c])
+                srt = vals[r][c].argsort()
+                # print vals[r][c][srt], vals[r][c]
+                difs[r][c]= (vals[r][c][srt[-1]] - vals[r][c][srt[-2]]) / vals[r][c][srt[-1]]
 
         walls = world.get_walls()
         for w in walls:
             max[w[0]][w[1]] = -1
-        end = world.endLocation
-        max[end[0]-1][end[1]-1] = 6
+            dir[w[0]][w[1]] = -1
         
-        return max
+        return max, dir, difs
     
     
 ###############################################################################
@@ -238,10 +242,16 @@ class Agent:
             episode += 1
             cost = self.train_fn(S, A, R, T, NS, grads)
             if episode % 15 == 0:
-                a, b = self.select_action(np.array([1,2]))
-                print "{} @ {}s left\te{:4}\tcost:{:15.10}\ts=green, w=yellow, n=dk.blue, e=lt.blue".format(prefix, int(end_time-time.time()), episode, cost)
+                a, b = self.select_action(np.array(world.get_state(1,2)))
+                print "{} @ {}s left\te{:4}\tcost:{:15.10}".format(prefix, int(end_time-time.time()), episode, cost),
                 
-                if episode % 150:
-                    vals = self.getRewardsPerSquare(world)
-                    # vis.draw_arrows(vals)
-                    vis.draw_matrix(vals)
+                if episode % 150 == 0:
+                    max, dir, difs = self.getRewardsPerSquare(world)
+                    print "MAX: {}, min: {}".format(np.max(np.max(np.max(max))),
+                                                    np.min(np.min(np.min(max)))),
+                    end = world.endLocation
+                    max[end[0]-1][end[1]-1] = 12
+                    dir[end[0]-1][end[1]-1] = -1
+
+                    vis.draw_matrix_w_arrows(max, dir, difs)
+                print

@@ -23,7 +23,7 @@ args = parser.parse_args()
 ### COMMAND LINE ARGUMENTS ###
 
 ### INITIALIZE OBJECTS ###
-world = JacobsMazeWorld.JacobsMazeWorld(1,1,1,True)
+world = JacobsMazeWorld.JacobsMazeWorld(1,1,1,True, True)
 
 agent = GenericAgent.Agent(
     state_size=world.get_state_space(),
@@ -45,7 +45,7 @@ print "\n\nCodename: {}".format("Systematic_Trainer")
 a = 1
 b = 3
 games = [
-    [2,2,1]
+    [3,3,1]
     
     # [1,1,1],
     # [1,1,2],
@@ -73,7 +73,7 @@ games = [
 F = False
 T = True
 train_layer_flags = [
-    [T, T, T] * 10
+    [[T, T, T]] * 10
     #  # [T, T, T],
     # [F, F, T], [F, F, T], 
     
@@ -105,7 +105,9 @@ times = [5] * len(train_layer_flags)
 # ]
 
 def Train(ids, train_layer_flags, max_train_time = 60):
-    world = JacobsMazeWorld.JacobsMazeWorld( ids[0], ids[1], ids[2], random_start = args.random_starting_location)
+    world = JacobsMazeWorld.JacobsMazeWorld( ids[0], ids[1], ids[2],
+                                             random_start = args.random_starting_location,
+                                             onehot_state=True)
     # tf_client = client.ModDNN_ZMQ_Client(ids[0], ids[1], ids[2])
 
     # request weights
@@ -120,8 +122,10 @@ def Train(ids, train_layer_flags, max_train_time = 60):
     exp = []
     for state in states:
         for act in world.get_action_space():
+            cur_state = world.get_state(state[0], state[1])
             next_state, reward, terminal = world.act(act, state[0], state[1])
-            exp.append([state, act, next_state, reward, terminal])
+            exp.append([cur_state, act, next_state, reward, terminal])
+                
     exp = np.array(exp).T
     
     # Now just train for ever!
@@ -129,7 +133,10 @@ def Train(ids, train_layer_flags, max_train_time = 60):
                                      ids[1], "T" if train_layer_flags[1] else "",
                                      ids[2], "T" if train_layer_flags[2] else "")
     agent.model.set_train_layer_flags(train_layer_flags)
-    agent.train_everything(prefix, max_train_time, exp[0].tolist(),exp[1].tolist(),exp[2].tolist(), exp[3].tolist(), exp[4].tolist(), grads=True, world=world)
+    agent.train_everything(prefix, max_train_time,
+                           exp[0].tolist(), exp[1].tolist(),
+                           exp[2].tolist(), exp[3].tolist(),
+                           exp[4].tolist(), grads=True, world=world)
     
     #Send gradients back to the server for him to stash
     # grads = agent.model.get_delta_weights()

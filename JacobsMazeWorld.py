@@ -30,13 +30,13 @@ def get_agent_mapping(id):
     }[id]()
 
 class JacobsMazeWorld(World):
-    def __init__(self, world_id=1, task_id = 1, agent_id = 1, random_start = False):
+    def __init__(self, world_id=1, task_id = 1, agent_id = 1, random_start = False, onehot_state=False):
         self.agent_id = agent_id
         self.task_id = task_id
         self.world_id = world_id
         self.random_start = random_start
         self.action_mapping = get_agent_mapping(self.agent_id)
-
+        self.onehot_state = onehot_state
         self.rewards = {
             maze_object.exit: 10.0,
             maze_object.coin:  1.0,
@@ -127,10 +127,18 @@ class JacobsMazeWorld(World):
     def get_state(self, cur_x=None, cur_y=None):
         if cur_x is None: cur_x = self.agent_location[0]
         if cur_y is None: cur_y = self.agent_location[1]
-        return [cur_x, cur_y]
+        if self.onehot_state:
+            a = np.zeros(12*12)
+            a[ (cur_x*12) + cur_y ] = 1
+            return a
+        else:
+            return [cur_x, cur_y]
             
     def get_state__maxes(self):
-        return [11,11] # For now, we just return the (x,y) position.
+        if self.onehot_state:
+            return np.ones(12*12)
+        else:
+            return [11,11] # For now, we just return the (x,y) position.
             
     def get_score(self):
         return self.currentScore

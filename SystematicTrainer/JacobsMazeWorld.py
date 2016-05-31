@@ -30,13 +30,13 @@ def get_agent_mapping(id):
     }[id]()
 
 class JacobsMazeWorld(World):
-    def __init__(self, world_id=1, task_id = 1, agent_id = 1, random_start = False):
+    def __init__(self, world_id=1, task_id = 1, agent_id = 1, random_start = False, onehot_state=False):
         self.agent_id = agent_id
         self.task_id = task_id
         self.world_id = world_id
         self.random_start = random_start
         self.action_mapping = get_agent_mapping(self.agent_id)
-
+        self.onehot_state = onehot_state
         self.rewards = {
             maze_object.exit: 10.0,
             maze_object.coin:  1.0,
@@ -118,19 +118,30 @@ class JacobsMazeWorld(World):
             terminal = True
             self.did_finish = True
 
-        next_state = self.agent_location
+        next_state = self.get_state()
         return next_state, reward_for_movement, terminal
 
     def get_time(self):
         return self.time
 
+    def create_onehot_state(self, x, y):
+        a = np.zeros(12*12)
+        a[ (x*12) + y ] = 1
+        return a
+        
     def get_state(self, cur_x=None, cur_y=None):
         if cur_x is None: cur_x = self.agent_location[0]
         if cur_y is None: cur_y = self.agent_location[1]
-        return [cur_x, cur_y]
+        if self.onehot_state:
+           return self.create_onehot_state(cur_x, cur_y)
+        else:
+            return [cur_x, cur_y]
             
     def get_state__maxes(self):
-        return [11,11] # For now, we just return the (x,y) position.
+        if self.onehot_state:
+            return np.ones(12*12)
+        else:
+            return [11,11] # For now, we just return the (x,y) position.
             
     def get_score(self):
         return self.currentScore
@@ -139,7 +150,9 @@ class JacobsMazeWorld(World):
         return range(len(self.action_mapping))
 
     def get_state_space(self):
-        return (len(self.get_state()),) # Number of return items 
+        # # return 2
+        # return 144
+        return len(self.get_state()) # Number of return items 
 
     def reset(self):
         self.restart()
@@ -154,7 +167,7 @@ class JacobsMazeWorld(World):
         for x in range(12):
             for y in range(12):
                 if self.maze[x, y] is not maze_object.wall:
-                    states.append(self.get_state(x, y))
+                    states.append([x, y])
         return states
     
     def heatmap_adder(self):

@@ -18,6 +18,7 @@ parser.add_argument('--task_id', '-tid',  default=1, type=int, help="ID of the t
 parser.add_argument('--agent_id', '-aid', default=1, type=int, help="ID of the agent you want to use (nsew/sewn/ewns/etc")
 # WORLD
 parser.add_argument('--random_starting_location', '-rand_start', default=False, action='store_true')
+parser.add_argument('--onehot_state', default=False, action='store_true')
 # AGENT
 parser.add_argument('--num_steps', '-ns', default=750000,  type=int)
 parser.add_argument('--annealing_size', '-an', default=1500,  type=int)
@@ -161,7 +162,8 @@ world = JacobsMazeWorld.JacobsMazeWorld(
     world_id = args.world_id,
     task_id  = args.task_id,
     agent_id = args.agent_id,
-    random_start = args.random_starting_location)
+    random_start = args.random_starting_location
+    onehot_state = args.onehot_state)
 
 tf_client = client.ModDNN_ZMQ_Client(
     world_id = args.world_id,

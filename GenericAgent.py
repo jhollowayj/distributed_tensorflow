@@ -182,7 +182,6 @@ class Agent:
         arr = [0] * self.number_of_actions
         arr[action] = 1
         return arr
-
         
     def set_weights(self, weights, network_type):
         self.model.set_weights(weights, network_type)
@@ -217,28 +216,15 @@ class Agent:
 ###############################################################################
 
     index_state_2_1 = None
-    def train_everything(self, num_episodes, state, action, next_state, reward, terminal, grads=False):
+    def train_everything(self, num_episodes, state, action, next_state, reward, terminal, grads=False, world=None):
         S = np.array(state)
         A = np.array([self.onehot(act) for act in action])
         R = np.array(reward)
         T = np.array(terminal)
         NS= np.array(next_state)
-        
-        # if index_state_2_1 is None:
-        #     for s in state:
-        #         if s[0] == 2 and s[1] == 1:
-        #             index_state_2_1 == state
 
-        import time
-        t, onek = time.time(), []
         for episode in xrange(num_episodes):    
             cost = self.train_fn(S, A, R, T, NS, grads)
             if episode % 15 == 0:
-                a, b = self.select_action(np.array([1,2]))
+                a, b = self.select_action(world.get_state(1,2))
                 print "{}\te{:4}\tcost:{:15.10}".format("testing", episode, cost)
-                if episode % 1000 == 0:
-                    onek.append(time.time() - t)
-        e = time.time()
-        # print "\n\nTime:{}".format(e - t)
-        # for i in range(len(onek)):
-        #     print "    {} : {}".format(1000*i, onek[i])

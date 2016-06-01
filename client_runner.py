@@ -18,7 +18,7 @@ parser.add_argument('--task_id', '-tid',  default=1, type=int, help="ID of the t
 parser.add_argument('--agent_id', '-aid', default=1, type=int, help="ID of the agent you want to use (nsew/sewn/ewns/etc")
 # WORLD
 parser.add_argument('--random_starting_location', '-rand_start', default=False, action='store_true')
-parser.add_argument('--onehot_state', default=False, action='store_true')
+parser.add_argument('--state_as_xy', default=False, action='store_true')
 # AGENT
 parser.add_argument('--num_steps', '-ns', default=750000,  type=int)
 parser.add_argument('--annealing_size', '-an', default=1500,  type=int)
@@ -94,7 +94,8 @@ def uuddlrlrba_start_konami_cheat(verbose=False):
     for state in states:
         for act in world.get_action_space():
             next_state, reward, terminal = world.act(act, state[0], state[1])
-            exp.append([state, act, next_state, reward, terminal])
+            cur_state = world.create_onehot_state(state[0],state[1])
+            exp.append([world.create_onehot_state(state[0],state[1]), act, next_state, reward, terminal])
             if verbose:
                 x = exp[-1]
                 print "Action: {} goes from {} to {}, r:{}, t:{}".format(x[1], x[0], x[2], x[3], x[4])
@@ -107,10 +108,10 @@ def uuddlrlrba_start_konami_cheat(verbose=False):
     total_trains_to_do = 3000
     between_server_sends = 100
     if args.ignore_server:
-        cost = agent.train_everything(total_trains_to_do, exp[0].tolist(),exp[1].tolist(),exp[2].tolist(), exp[3].tolist(), exp[4].tolist(), grads=True)
+        cost = agent.train_everything(total_trains_to_do, exp[0].tolist(),exp[1].tolist(),exp[2].tolist(), exp[3].tolist(), exp[4].tolist(), grads=True, world=world)
     else:
         for _ in range(total_trains_to_do/between_server_sends):
-            cost = agent.train_everything(between_server_sends, exp[0].tolist(),exp[1].tolist(),exp[2].tolist(), exp[3].tolist(), exp[4].tolist(), grads=True)
+            cost = agent.train_everything(between_server_sends, exp[0].tolist(),exp[1].tolist(),exp[2].tolist(), exp[3].tolist(), exp[4].tolist(), grads=True, world=world)
             interact_with_server(True)
     print "\n\n=========\n=========\n Leaving the cheat mode.\n=========\n=========\n\n"
 ### OTHER FUNCTIONS ###
@@ -162,8 +163,8 @@ world = JacobsMazeWorld.JacobsMazeWorld(
     world_id = args.world_id,
     task_id  = args.task_id,
     agent_id = args.agent_id,
-    random_start = args.random_starting_location
-    onehot_state = args.onehot_state)
+    random_start = args.random_starting_location,
+    onehot_state = not args.state_as_xy)
 
 tf_client = client.ModDNN_ZMQ_Client(
     world_id = args.world_id,

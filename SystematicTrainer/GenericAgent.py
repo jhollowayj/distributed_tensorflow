@@ -1,8 +1,6 @@
 import random
 import numpy as np
 from DQN import DQN
-import time
-
 
 class Agent:
     def __init__(self, state_size=None, number_of_actions=1, just_greedy=False, start_epsilon=1.0,
@@ -184,15 +182,7 @@ class Agent:
         arr = [0] * self.number_of_actions
         arr[action] = 1
         return arr
-        
-    def get_gradients(self):
-        grs = self.model.get_and_clear_gradients()
-        # Note this is not dynamic!  It's hard coded for 3 layers, each with 2 items (w, b)
-        g1 = grs[0:2]
-        g2 = grs[2:4]
-        g3 = grs[4:6]
-        return [g1,g2,g3]
-        
+                
     def getRewardsPerSquare(self, world):
         vals = np.zeros((10,10,4)).astype(np.float32)
         for x in range(10):

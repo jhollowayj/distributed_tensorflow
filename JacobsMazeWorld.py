@@ -113,26 +113,38 @@ class JacobsMazeWorld(World):
 
         if desiredCellType != maze_object.wall: # move if not a wall.
             self.agent_location = desiredCell
+        else: # This might need to be added, but if someone just wants to check something,
+            self.agent_location = (cur_x, cur_y) #  ... it might break that...
+                                                 #  Sorry it's spaghetti code... :(
+
         # Terminal?
         if self.endLocation == desiredCell:
             terminal = True
             self.did_finish = True
 
-        next_state = self.agent_location
+        next_state = self.get_state()
         return next_state, reward_for_movement, terminal
 
     def get_time(self):
         return self.time
 
+    def create_onehot_state(self, x, y):
+        a = np.zeros(12*12)
+        a[ (x*12) + y ] = 1
+        return a
+        
     def get_state(self, cur_x=None, cur_y=None):
         if cur_x is None: cur_x = self.agent_location[0]
         if cur_y is None: cur_y = self.agent_location[1]
         if self.onehot_state:
-            a = np.zeros(12*12)
-            a[ (cur_x*12) + cur_y ] = 1
-            return a
+           return self.create_onehot_state(cur_x, cur_y)
         else:
             return [cur_x, cur_y]
+            
+    def get_state_xy(self, cur_x=None, cur_y=None):
+        if cur_x is None: cur_x = self.agent_location[0]
+        if cur_y is None: cur_y = self.agent_location[1]
+        return [cur_x, cur_y]
             
     def get_state__maxes(self):
         if self.onehot_state:
@@ -162,7 +174,7 @@ class JacobsMazeWorld(World):
         for x in range(12):
             for y in range(12):
                 if self.maze[x, y] is not maze_object.wall:
-                    states.append(self.get_state(x, y))
+                    states.append([x, y])
         return states
     
     def heatmap_adder(self):

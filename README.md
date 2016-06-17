@@ -45,4 +45,4 @@ https://www.lucidchart.com/documents/view/d52e3617-3df2-46df-b3f1-ee42f73cf476
 - Server-Client messages are handled via `ZMQ`.
 - Networks are built using `tensorflow`.
 - Obviously, Nvidia `CUDA` and `cuDNN` are also required
-
+ 

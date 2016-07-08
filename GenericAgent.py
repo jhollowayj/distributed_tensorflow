@@ -3,12 +3,16 @@ import numpy as np
 from DQN import DQN
 
 class Agent:
-    def __init__(self, state_size=None, number_of_actions=1, just_greedy=False, start_epsilon=1.0,
+    def __init__(self, wid=1, tid=1, aid=1,
+                 state_size=None, number_of_actions=1, just_greedy=False, start_epsilon=1.0,
                  end_epsilon=0.1, batch_size=200, memory=10000, boltzman_softmax = False,
                  save_name='basic', annealing_size=100, use_experience_replay=True,
                  input_scaling_vector=None, allow_local_nn_weight_updates=False,
                  learning_rate = 0.0002, momentum=0.0, discount = 0.90,
                  requested_gpu_vram_percent = 0.01, device_to_use = 0):
+        self.world_id = wid
+        self.task_id = tid
+        self.agent_id = aid
         self.state_size = state_size
         self.number_of_actions = number_of_actions
         self.start_epsilon = start_epsilon
@@ -46,6 +50,7 @@ class Agent:
     
     def build_model(self):
         self.model = DQN(
+            wid=self.world_id, tid=self.task_id, aid=self.agent_id,
             input_dims = self.state_size[0],
             num_act = self.number_of_actions,
             input_scaling_vector = self.input_scaling_vector,
@@ -182,17 +187,6 @@ class Agent:
         arr = [0] * self.number_of_actions
         arr[action] = 1
         return arr
-        
-    def set_weights(self, weights, network_type):
-        self.model.set_weights(weights, network_type)
-
-    def get_gradients(self):
-        grs = self.model.get_and_clear_gradients()
-        # Note this is not dynamic!  It's hard coded for 3 layers, each with 2 items (w, b)
-        g1 = grs[0:2]
-        g2 = grs[2:4]
-        g3 = grs[4:6]
-        return [g1,g2,g3]
         
     def getRewardsPerSquare(self, world):
         vals = [np.zeros((10,10))] * 4

@@ -5,7 +5,7 @@ from DQN import DQN
 class Agent:
     def __init__(self, wid=1, tid=1, aid=1,
                  state_size=None, number_of_actions=1, just_greedy=False, start_epsilon=1.0,
-                 end_epsilon=0.1, batch_size=200, memory=10000, boltzman_softmax = False,
+                 end_epsilon=0.1, batch_size=200, memory_size=10000, boltzman_softmax = False,
                  save_name='basic', annealing_size=100, use_experience_replay=True,
                  input_scaling_vector=None, allow_local_nn_weight_updates=False,
                  learning_rate = 0.0002, momentum=0.0, discount = 0.90,
@@ -33,7 +33,7 @@ class Agent:
         self.is_eval = False
         
         self.use_exp_replay = use_experience_replay
-        self.memory = memory 
+        self.memory_size = memory_size 
         
         self.states = []
         self.actions = []
@@ -42,11 +42,6 @@ class Agent:
         self.next_state = []
 
         self.build_model()
-
-        if self.allow_local_nn_weight_updates:
-            print "NOTE: network is allowed to update his own weights!" 
-        if self.input_scaling_vector is None:
-            print "Not able to scale input.  This may lead to exploding gradients with multiple clients."
     
     def build_model(self):
         self.model = DQN(
@@ -71,11 +66,11 @@ class Agent:
             self.terminal.append([])
             self.next_state.append([])
             
-            self.states     = self.states[-self.memory:]
-            self.actions    = self.actions[-self.memory:]
-            self.rewards    = self.rewards[-self.memory:]
-            self.terminal   = self.terminal[-self.memory:]
-            self.next_state = self.next_state[-self.memory:]
+            self.states     = self.states[-self.memory_size:]
+            self.actions    = self.actions[-self.memory_size:]
+            self.rewards    = self.rewards[-self.memory_size:]
+            self.terminal   = self.terminal[-self.memory_size:]
+            self.next_state = self.next_state[-self.memory_size:]
         else:
             self.states = []
             self.actions = []
@@ -143,8 +138,8 @@ class Agent:
 
     def train(self, allow_update=True):
         self.iterations += 1
-        if self.use_exp_replay:
-            S, A, R, T, NS = self._calc_training_data__exp_rep()
+                if self.use_exp_replay:
+                S, A, R, T, NS = self._calc_training_data__exp_rep()
         else:
             S, A, R, T, NS = self._calc_training_data_no_exp_rep()
         cost = self.train_fn(np.array(S), np.array(A), np.array(R), np.array(T), np.array(NS), allow_update)
@@ -152,26 +147,21 @@ class Agent:
 
     def _calc_training_data__exp_rep(self):
         N = len(self.states)
-        
-        # This sampled according to value.  But instead, we should select according to network error produced 
-        # P = np.array([sum(episode)/len(episode) for episode in self.rewards]).astype(float)
-        # P *= np.abs(P) # Square it (keeping the sign)
-        # P -= np.min(P) # Set min to zero
-        # P += 1            # still give the little guy a chance
-        # P /= np.sum(P) # Scale to 0-1 (to sum to one)
+
         S, A, R, T, NS = [], [], [], [], []
         for i in xrange(self.batch_size):
-            episodeId = random.randint(max(0, N-self.memory), N-1)   # Pick a past episode
-            # episodeId = np.random.choice(len(P), p=P) # Select according to probablility
 
-            num_frames = len(self.states[episodeId])       # Choose a random state from that episode 
-            frame = random.randint(0, num_frames-1)        #   (cont)
-
-            S.append(self.states[episodeId][frame])        # Adds state to batch
-            A.append(self.onehot(self.actions[episodeId][frame])) # Add action
-            R.append(self.rewards[episodeId][frame])       # Add reward
-            T.append(self.terminal[episodeId][frame])      # Is it the termial of that episode?
-            NS.append(self.next_state[episodeId][frame])   # Add next state
+            # Pick a past episode
+            episodeId = random.randint(max(0, N-self.memory_size), N-1)
+            # Then a random frame from past episode
+            num_frames = len(self.states[episodeId]) 
+            frame = random.randint(0, num_frames-1)
+            # Grab the experience
+            S.append(self.states[episodeId][frame])
+            A.append(self.onehot(self.actions[episodeId][frame]))
+            R.append(self.rewards[episodeId][frame])
+            T.append(self.terminal[episodeId][frame])
+            NS.append(self.next_state[episodeId][frame])
             
         return np.array(S), np.array(A), np.array(R), np.array(T), np.array(NS)
 
@@ -187,38 +177,3 @@ class Agent:
         arr = [0] * self.number_of_actions
         arr[action] = 1
         return arr
-        
-    def getRewardsPerSquare(self, world):
-        vals = [np.zeros((10,10))] * 4
-        for x in range(10):
-            for y in range(10):
-                state = world.get_state(x+1, y+1)
-                action_values = self.value_fn([state])
-                print "returned qvals: {}{} = {}".format(x, y, action_values)
-                for action_index, action_value in enumerate(action_values[0]):
-                    # print "=== ind:{}, val: {}".format(action_index, action_value)
-                    vals[action_index][x][y] = action_value
-        return vals
-    
-    
-###############################################################################
-###############################################################################
-###############################################################################
-#####################  THIS IS ME CHEATING...  ################################
-###############################################################################
-###############################################################################
-###############################################################################
-
-    index_state_2_1 = None
-    def train_everything(self, num_episodes, state, action, next_state, reward, terminal, grads=False, world=None):
-        S = np.array(state)
-        A = np.array([self.onehot(act) for act in action])
-        R = np.array(reward)
-        T = np.array(terminal)
-        NS= np.array(next_state)
-
-        for episode in xrange(num_episodes):    
-            cost = self.train_fn(S, A, R, T, NS, grads)
-            if episode % 15 == 0:
-                a, b = self.select_action(world.get_state(1,2))
-                print "{}\te{:4}\tcost:{:15.10}".format("testing", episode, cost)

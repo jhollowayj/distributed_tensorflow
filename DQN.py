@@ -81,22 +81,15 @@ class DQN:
     def train(self, states, actions, rewards, terminals, next_states, allow_update=True):
         q_target_max = np.amax(self.q(next_states), axis=1) # Pick the next state's best value to use in the reward (curRew + discount*(nextRew))
 
-        start_weights = self.sess.run(self.all_layers)
         feed_dict={self.x: self.scale_state_input(states), self.q_t: q_target_max, self.actions: actions, self.rewards: rewards, self.terminals:terminals}
         _, costs = self.sess.run([self.rmsprop_min, self.cost], feed_dict=feed_dict)
-        end_weights = self.sess.run(self.all_layers)
-
-        if allow_update:
-            self.stash_gradients([end_weights[i] - start_weights[i] for i in range(len(start_weights))])
-        if not self.params['allow_local_nn_weight_updates'] or not allow_update:
-            self.set_all_weights(start_weights)
 
         return costs
         
     def q(self, states):
         return self.sess.run(self.y, feed_dict={self.x: self.scale_state_input(states)})
     
-    def scale_state_input(self, state_to_scale):
+    def scale_state_input(self, state_to_scale): # TODO move this to be part of tensorflow to speed things up
         if self.params['input_scaling_vector'] is None:
             return state_to_scale
         else:

@@ -222,7 +222,7 @@ class Agent:
         R = np.array(reward)
         T = np.array(terminal)
         NS= np.array(next_state)
-        import vis
+        import vis, time
 
         episode = 0
         start_time = time.time()

@@ -78,7 +78,8 @@ def Train(ids, train_layer_flags, max_train_time = 60):
             next_state, reward, terminal = world.act(act, state[0], state[1])
             exp.append([cur_state, act, next_state, reward, terminal])
                 
-    exp = np.array(exp).T
+    exp = np.array(exp * 10).T # run it 10 times each.
+    
     
     # Now just train for ever!
     prefix = "{}{}.{}{}.{}{}".format(ids[0], "T" if train_layer_flags[0] else "",

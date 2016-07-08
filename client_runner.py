@@ -34,6 +34,7 @@ parser.add_argument('--eval_episodes_to_take', '-eval_len', default=15, type=int
                      help="Ignored if evaluate_peridocally is false.  defaults to (TODO find a good one)")
 parser.add_argument('--codename', '-name', default="", type=str, help="code name used to display in sql")
 parser.add_argument('--steps_til_train', '-stt', default=150, type=int)
+parser.add_argument('--batch_size', '-size', default=250, type=int)
 # NEURAL-NET       #Discount Factor, Learning Rate, etc. TODO
 parser.add_argument('--scale_input', default=False, action='store_true')
 parser.add_argument('--discount_rate', '-disc', default=0.90, type=float)
@@ -177,7 +178,7 @@ agent = GenericAgent.Agent(
     input_scaling_vector=world.get_state__maxes() if args.scale_input else None, # Default None
     start_epsilon=args.start_epsilon,
     end_epsilon=args.end_epsilon,
-    batch_size=250,
+    batch_size=args.batch_size,
     learning_rate = args.learning_rate,
     momentum = args.momentum,
     discount = args.discount_rate,

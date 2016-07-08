@@ -1,9 +1,8 @@
 import random
 import numpy as np
-from DQN import DQN
 
 class Agent:
-    def __init__(self, wid=1, tid=1, aid=1,
+    def __init__(self, wid=1, tid=1, aid=1, dqn=None,
                  state_size=None, number_of_actions=1, just_greedy=False, start_epsilon=1.0,
                  end_epsilon=0.1, batch_size=200, memory_size=10000, boltzman_softmax = False,
                  save_name='basic', annealing_size=100, use_experience_replay=True,
@@ -40,21 +39,8 @@ class Agent:
         self.rewards = []
         self.terminal = []
         self.next_state = []
-
-        self.build_model()
     
-    def build_model(self):
-        self.model = DQN(
-            wid=self.world_id, tid=self.task_id, aid=self.agent_id,
-            input_dims = self.state_size[0],
-            num_act = self.number_of_actions,
-            input_scaling_vector = self.input_scaling_vector,
-            lr = self.learning_rate, 
-            rms_momentum = self.momentum, 
-            discount = self.discount, 
-            allow_local_nn_weight_updates = self.allow_local_nn_weight_updates,
-            requested_gpu_vram_percent = self.requested_gpu_vram_percent,
-            device_to_use = self.device_to_use)
+        self.model = dqn
         self.train_fn = self.model.train
         self.value_fn = self.model.q
 

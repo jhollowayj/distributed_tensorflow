@@ -3,6 +3,8 @@ import JacobsMazeWorld
 from DQN import DQN
 import GenericAgent
 import time
+import sys
+import numpy as np
 
 ######################################################################################
 #Flags for defining the tf.train.ClusterSpec
@@ -52,7 +54,6 @@ tf.app.flags.DEFINE_boolean('report_to_sql', False, "Send numbers to sql.  Defau
 tf.app.flags.DEFINE_integer('num_parallel_learners', -1, "Mostly just used for sql logging.")
 FLAGS = tf.app.flags.FLAGS
 
-
 if FLAGS.observer:
     FLAGS.ignore_evaluation_periods = False
     FLAGS.eval_episodes_between_evaluation = 10
@@ -61,113 +62,148 @@ if FLAGS.observer:
     FLAGS.end_epsilon = 0.08   # give him a little bit of random to get out of bad policies
     FLAGS.annealing_size = 1
 
-######################################################################################
+world, dqn, agent = None, None, None
+max_q, min_q, sum_q, winning_cnt, running_score = None, None, None, None, None
+
+class Runner:
+  def __init__(self, FLAGS):
+    self.FLAGS = FLAGS
+  def main(self):
+    ps_hosts = self.FLAGS.ps_hosts.split(",")
+    worker_hosts = self.FLAGS.worker_hosts.split(",")
+
+    # Create a cluster from the parameter server and worker hosts.
+    cluster = tf.train.ClusterSpec({"ps": ps_hosts, "worker": worker_hosts})
+
+    # Create and start a server for the local task.
+    server = tf.train.Server(cluster,
+                            job_name=self.FLAGS.job_name,
+                            task_index=self.FLAGS.task_index)
+
+    ##########################################################################################
+    if self.FLAGS.job_name == "ps":
+      server.join()
+    elif self.FLAGS.job_name == "worker":
+      self.run_client(server)
+      
+  def run_client(self, server):
+      saver, summary_op, init_op, global_step_var = self.build_classes_and_variables()
+      ###################################################################################
+      # Create a "supervisor", which oversees the training process.
+      sv = tf.train.Supervisor(is_chief=(self.FLAGS.task_index == 0),
+                              logdir="/mnt/pccfs/projects/distTF/modularDNN_Practice/logs/",
+                              init_op=init_op,
+                              summary_op=summary_op,
+                              saver=saver,
+                              global_step=global_step_var,
+                              save_model_secs=600)
+      ###################################################################################
+      start_time = time.time()
+      gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1, allow_growth=True)
+      print(gpu_options)
+      with sv.prepare_or_wait_for_session(server.target, config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
+        self.dqn.set_session(sess) # Give him a session.
+        print("\nSTARTING UP THE TRAINING STEPS =-=-=-=-=-=-=-=-=-=-=-=\n")
+        sys.stdout.flush()
+
+        step_cnt, update_cnt, eval_episode = 1, 1, 0
+        max_q, min_q, sum_q, winning_cnt, running_score = self.reset_variables()
+        self.agent.reset_exp_db()
+        # Time to play the game vvv
+        while not sv.should_stop() and step_cnt < self.FLAGS.num_steps:
+          self.world.reset()
+          if self.is_eval_episode(update_cnt+eval_episode):
+              eval_episode += 1
+              self.agent.set_evaluate_flag(True)
+              tmp_exp = self.agent.get_exp_db() # Save state
+              max_q, min_q, sum_q, winning_cnt, running_score = self.reset_variables()
+              while self.world.is_running() and self.world.get_time() < self.FLAGS.max_steps_per_episode:
+                  reward, max_q, min_q = self.run_world_one_step(max_q, min_q)
+                  running_score += reward
+              # Test your network & Report
+              cost = self.agent.train(False)
+              self.agent.set_exp_db(tmp_exp)  # Restore state
+          else:
+              self.agent.set_evaluate_flag(False)
+              while self.world.is_running() and self.world.get_time() < self.FLAGS.max_steps_per_episode:
+                  reward, max_q, min_q = self.run_world_one_step(max_q, min_q)
+                  running_score += reward
+                  step_cnt += 1
+                  if step_cnt % self.FLAGS.steps_til_train == 0:
+                      update_cnt += 1
+                      cost = self.agent.train()
+                      max_q, min_q, sum_q, winning_cnt, running_score = self.reset_variables()
+                      
+          if self.world.get_time() != self.FLAGS.max_steps_per_episode:
+              winning_cnt += 1
+
+      # Once done, ask for all the services to stop.
+      sv.stop()
+
+  def build_classes_and_variables(self):
+      self.world = JacobsMazeWorld.JacobsMazeWorld(
+            world_id = self.FLAGS.world_id,
+            task_id  = self.FLAGS.task_id,
+            agent_id = self.FLAGS.agent_id,
+            random_start = self.FLAGS.random_starting_location,
+            onehot_state = True)
+
+      self.dqn = DQN(wid=self.FLAGS.world_id, tid=self.FLAGS.task_id, aid=self.FLAGS.agent_id,
+            input_dims = self.world.get_state_space()[0],
+            num_act = len(self.world.get_action_space()),
+            input_scaling_vector=self.world.get_state__maxes() if self.FLAGS.scale_input else None, # Default None
+            lr = self.FLAGS.learning_rate, 
+            rms_momentum = self.FLAGS.momentum, 
+            discount = self.FLAGS.discount_rate,
+            requested_gpu_vram_percent = self.FLAGS.requested_gpu_vram_percent,
+            device_to_use = self.FLAGS.device_to_use)
+            
+      self.agent = GenericAgent.Agent( dqn=self.dqn,
+            start_epsilon=self.FLAGS.start_epsilon,
+            end_epsilon=self.FLAGS.end_epsilon,
+            batch_size=self.FLAGS.batch_size,
+            boltzman_softmax= self.FLAGS.boltzman_softmax,
+            use_experience_replay=self.FLAGS.use_experience_replay,
+            annealing_size=int(self.FLAGS.annealing_size) )# annealing_size=self.FLAGS.annealing_size,
+
+      with tf.name_scope('global_vars'):
+          global_step_var = tf.Variable(0)
+
+      # Run all the initializers to prepare the trainable parameters.
+      saver = tf.train.Saver()                # dist
+      summary_op = tf.merge_all_summaries()   # dist
+      init_op = tf.initialize_all_variables() # dist
+      return saver, summary_op, init_op, global_step_var
 
 
-def main(argv=None):
-  ps_hosts = FLAGS.ps_hosts.split(",")
-  worker_hosts = FLAGS.worker_hosts.split(",")
-
-  # Create a cluster from the parameter server and worker hosts.
-  cluster = tf.train.ClusterSpec({"ps": ps_hosts, "worker": worker_hosts})
-
-  # Create and start a server for the local task.
-  server = tf.train.Server(cluster,
-                           job_name=FLAGS.job_name,
-                           task_index=FLAGS.task_index)
-
-  ##########################################################################################
-  if FLAGS.job_name == "ps":
-    server.join()
-  elif FLAGS.job_name == "worker":
-
-    # BUILD ALL THE CLASSES
-    world = JacobsMazeWorld.JacobsMazeWorld(
-          world_id = FLAGS.world_id,
-          task_id  = FLAGS.task_id,
-          agent_id = FLAGS.agent_id,
-          random_start = FLAGS.random_starting_location,
-          onehot_state = True)
-
-    dqn = DQN(wid=FLAGS.world_id, tid=FLAGS.task_id, aid=FLAGS.agent_id,
-          input_dims = world.get_state_space()[0],
-          num_act = len(world.get_action_space()),
-          input_scaling_vector=world.get_state__maxes() if FLAGS.scale_input else None, # Default None
-          lr = FLAGS.learning_rate, 
-          rms_momentum = FLAGS.momentum, 
-          discount = FLAGS.discount_rate,
-          requested_gpu_vram_percent = FLAGS.requested_gpu_vram_percent,
-          device_to_use = FLAGS.device_to_use)
-          
-    agent = GenericAgent.Agent( dqn=dqn,
-          start_epsilon=FLAGS.start_epsilon,
-          end_epsilon=FLAGS.end_epsilon,
-          batch_size=FLAGS.batch_size,
-          boltzman_softmax= FLAGS.boltzman_softmax,
-          use_experience_replay=FLAGS.use_experience_replay,
-          annealing_size=int(FLAGS.annealing_size) )# annealing_size=args.annealing_size,
-
-    with tf.name_scope('global_vars'):
-        global_step_var = tf.Variable(0)
-
-    # Run all the initializers to prepare the trainable parameters.
-    saver = tf.train.Saver()                # dist
-    summary_op = tf.merge_all_summaries()   # dist
-    init_op = tf.initialize_all_variables() # dist
-    
-    ###################################################################################
-    # Create a "supervisor", which oversees the training process.
-    sv = tf.train.Supervisor(is_chief=(FLAGS.task_index == 0),
-                             logdir="/mnt/pccfs/projects/distTF/mnist/logs/",
-                             init_op=init_op,
-                             summary_op=summary_op,
-                             saver=saver,
-                             global_step=global_step_var,
-                             save_model_secs=600)
-    ###################################################################################
-    start_time = time.time()
-    #with tf.Session() as sess:
-    #with sv.managed_session(server.target) as sess:
-    gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1, allow_growth=True)
-    print(gpu_options)
-    with sv.prepare_or_wait_for_session(server.target, config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-      dqn.set_session(sess) # Give him a session.
-      print("\nSTARTING UP THE TRAINING STEPS =-=-=-=-=-=-=-=-=-=-=-=\n")
-      sys.stdout.flush()
-      # Loop through training steps.
-      step = 0
-      while not sv.should_stop() and step < (int(num_epochs * train_size) // BATCH_SIZE):
-        # Compute the offset of the current minibatch in the data.
-        # Note that we could use better randomization across epochs.
-        offset = (step * BATCH_SIZE) % (train_size - BATCH_SIZE)
-        batch_data = train_data[offset:(offset + BATCH_SIZE), ...]
-        batch_labels = train_labels[offset:(offset + BATCH_SIZE)]
-        # This dictionary maps the batch data (as a numpy array) to the
-        # node in the graph it should be fed to.
-        feed_dict = {train_data_node: batch_data,
-                     train_labels_node: batch_labels}
-        # Run the graph and fetch some of the nodes.
-        _, l, lr, predictions, globalstep = sess.run([optimizer, loss, learning_rate, train_prediction, batch], feed_dict=feed_dict)
-        if step % EVAL_FREQUENCY == 0:
-          elapsed_time = time.time() - start_time
-          start_time = time.time()
-          print('Step %d (%d) (epoch %.2f), %.1f ms' % (step, globalstep, float(step) * BATCH_SIZE / train_size, 1000 * elapsed_time / EVAL_FREQUENCY))
-          print('Minibatch loss: %.3f, learning rate: %.6f' % (l, lr))
-          print('Minibatch error: %.1f%%' % error_rate(predictions, batch_labels))
-          print('Validation error: %.1f%%' % error_rate(eval_in_batches(validation_data, sess), validation_labels))
-          print('')
-          sys.stdout.flush()
-      # Finally print the result!
-      test_error = error_rate(eval_in_batches(test_data, sess), test_labels)
-      print('Test error: %.1f%%' % test_error)
-      if FLAGS.self_test:
-        print('test_error', test_error)
-        assert test_error == 0.0, 'expected 0.0 test_error, got %.2f' % (
-            test_error,)
-      sys.stdout.flush()
-    # Ask for all the services to stop.
-    sv.stop()
-
+  ### Helpers
+  def run_world_one_step(self, max_q, min_q):
+      cur_state = self.world.get_state()
+      action, values = self.agent.select_action(np.array(cur_state))
+      next_state, reward, terminal = self.world.act(action)
+      self.agent.stash_new_exp(cur_state, action, reward, terminal, next_state)
+      return reward, max(max_q, np.max(values)),  min(min_q, np.min(values))
+      
+  def is_eval_episode(self, e):
+      is_eval = None
+      if self.FLAGS.ignore_evaluation_periods:
+          is_eval = False # Just keep on learning
+      else:
+          period = self.FLAGS.eval_episodes_between_evaluation + self.FLAGS.eval_episodes_to_take
+          is_eval = e % period >= self.FLAGS.eval_episodes_between_evaluation
+      return is_eval
+      
+  def print_to_console(self, is_eval, update_cnt, avgScore, max_q, cost, winning):
+      print "%s = stp:%6d:: Re:%5.1f, Max_Q:%7.3f, c:%9.4f, E:%4.3f, W?:%s %s" % \
+      ("{}.{}.{}".format(self.FLAGS.world_id, self.FLAGS.task_id, self.FLAGS.agent_id),
+      update_cnt, avgScore, max_q, cost, self.agent.calculate_epsilon(),
+      str(winning), "EVAL" if is_eval else "")
+      
+  def reset_variables(self):
+      self.agent.reset_exp_db() # go ahead and reset now.  Note:exp will span multiple games now.
+      return -np.Infinity, np.Infinity, 0.0, 0, 0.0 # max_q, min_q, sum_q, winning_cnt, running_score
+       
 
 if __name__ == '__main__':
-  tf.app.run()
+  r = Runner(FLAGS)
+  r.main()

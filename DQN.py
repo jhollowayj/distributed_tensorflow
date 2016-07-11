@@ -13,7 +13,7 @@ class DQN:
         self.params = {
             'wid' : wid,
             'tid' : tid,
-            'wid' : aid,
+            'aid' : aid,
             'input_dims': input_dims,
             'layer_1_hidden': 1000,
             'layer_2_hidden': 1000,
@@ -50,23 +50,23 @@ class DQN:
         layer_1_hidden = self.params['layer_1_hidden']
         layer_2_hidden = self.params['layer_2_hidden']
 
-        with tf.name_scope("world_{}".format(self.params['wid'])):
+        with tf.variable_scope("world_{}".format(self.params['wid'])):
             self.w1 = tf.get_variable("weight", shape=(self.params['input_dims'], layer_1_hidden), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
             self.b1 = tf.get_variable("bias", shape=(layer_1_hidden), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
             self.o1 = tf.nn.relu(tf.add(tf.matmul(self.x,self.w1),self.b1), name="output")
 
-        with tf.name_scope("task_{}".format(self.params['tid'])):
+        with tf.variable_scope("task_{}".format(self.params['tid'])):
             self.w2 = tf.get_variable("weight", shape=(layer_1_hidden, layer_2_hidden), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
             self.b2 = tf.get_variable("bias", shape=(layer_2_hidden), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
             self.o2 = tf.nn.relu(tf.add(tf.matmul(self.o1,self.w2),self.b2), name="output")
 
-        with tf.name_scope("agent_{}".format(self.params['aid'])):
-            self.w2 = tf.get_variable("weight", shape=(layer_2_hidden, self.params['num_act']), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
-            self.b2 = tf.get_variable("bias", shape=(self.params['num_act']), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
+        with tf.variable_scope("agent_{}".format(self.params['aid'])):
+            self.w3 = tf.get_variable("weight", shape=(layer_2_hidden, self.params['num_act']), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
+            self.b3 = tf.get_variable("bias", shape=(self.params['num_act']), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
             self.y = tf.add(tf.matmul(self.o2,self.w3),self.b3, name="output_aka_y")
 
         #Q,Cost,Optimizer
-        with tf.name_scope("optimizer"):
+        with tf.variable_scope("optimizer"):
             self.discount = tf.constant(self.params['discount'], name="discount")
             self.yj = tf.add(self.rewards, tf.mul(1.0-self.terminals, tf.mul(self.discount, self.q_t)), name="true_y")
             self.Q_pred = tf.reduce_sum(tf.mul(self.y,self.actions), reduction_indices=1, name="q_pred")

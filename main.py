@@ -1,5 +1,7 @@
 import tensorflow as tf
-
+import JacobsMazeWorld
+from DQN import dqn
+import GenericAgent
 
 ######################################################################################
 #Flags for defining the tf.train.ClusterSpec

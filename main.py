@@ -2,6 +2,7 @@ import tensorflow as tf
 import JacobsMazeWorld
 from DQN import DQN
 import GenericAgent
+import time
 
 ######################################################################################
 #Flags for defining the tf.train.ClusterSpec
@@ -106,8 +107,14 @@ def main(argv=None):
           use_experience_replay=FLAGS.use_experience_replay,
           annealing_size=int(FLAGS.annealing_size) )# annealing_size=args.annealing_size,
 
-    ### RUN ###
-          
+    with tf.name_scope('global_vars'):
+        global_step_var = tf.Variable(0)
+
+    # Run all the initializers to prepare the trainable parameters.
+    saver = tf.train.Saver()                # dist
+    summary_op = tf.merge_all_summaries()   # dist
+    init_op = tf.initialize_all_variables() # dist
+    
     ###################################################################################
     # Create a "supervisor", which oversees the training process.
     sv = tf.train.Supervisor(is_chief=(FLAGS.task_index == 0),
@@ -115,7 +122,7 @@ def main(argv=None):
                              init_op=init_op,
                              summary_op=summary_op,
                              saver=saver,
-                             global_step=batch,
+                             global_step=global_step_var,
                              save_model_secs=600)
     ###################################################################################
     start_time = time.time()
@@ -124,6 +131,7 @@ def main(argv=None):
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1, allow_growth=True)
     print(gpu_options)
     with sv.prepare_or_wait_for_session(server.target, config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
+      dqn.set_session(sess) # Give him a session.
       print("\nSTARTING UP THE TRAINING STEPS =-=-=-=-=-=-=-=-=-=-=-=\n")
       sys.stdout.flush()
       # Loop through training steps.

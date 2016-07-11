@@ -30,12 +30,8 @@ class DQN:
             'learning_rate_end':    0.003, #0.000001,
             'learning_rate_decay':  3000,
         }
-        
-        self.build_network_variables()
-        self.sess.run(tf.initialize_all_variables())
-        tf.get_default_graph().finalize() # Disallow any more nodes to be added. Helps for debugging later
-        print "###\n### Networks initialized\n### Ready to begin\n###"
 
+        self.build_network_variables()
         
     def build_network_variables(self):
         with tf.name_scope("placeholders"):
@@ -76,7 +72,10 @@ class DQN:
                                                         decay=self.params['rms_decay'],
                                                         momentum=self.params['rms_momentum'],
                                                         epsilon=self.params['rms_eps']).minimize(self.cost)
-
+    
+    def set_session(self, session):
+        self.sess = session 
+    
     def train(self, states, actions, rewards, terminals, next_states, allow_update=True):
         q_target_max = np.amax(self.q(next_states), axis=1) # Pick the next state's best value to use in the reward (curRew + discount*(nextRew))
 

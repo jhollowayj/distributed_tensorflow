@@ -30,7 +30,7 @@ WK_CVD_IDS=( 0 )           #0 0 0 0 0 0 0 )
 
 #####################################################################################
 CD="cd /mnt/pccfs/projects/distTF/modularDNN_Practice/"
-RM_LOG="rm -r /mnt/pccfs/projects/distTF/modularDNN_Practice/log/"
+RM_LOG="rm -r /mnt/pccfs/projects/distTF/modularDNN_Practice/logs/"
 KILL="fuser -k"
 #####################################################################################
 CVD="CUDA_VISIBLE_DEVICES"

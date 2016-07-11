@@ -10,7 +10,6 @@ class DQN:
             eps = 1.0, discount = 0.90, lr = 0.0002,
             rms_eps = 1e-6, rms_decay=0.99, rms_momentum=0.0,
             input_scaling_vector=None,
-            allow_local_nn_weight_updates=False,
             requested_gpu_vram_percent=0.01,
             device_to_use=0, verbose = 0):
         self.params = {
@@ -24,7 +23,6 @@ class DQN:
             'rms_decay': rms_decay,
             'rms_momentum': rms_momentum,
             'input_scaling_vector': None if input_scaling_vector is None else np.array(input_scaling_vector),
-            'allow_local_nn_weight_updates': allow_local_nn_weight_updates,
             'requested_gpu_vram_percent': requested_gpu_vram_percent, 
             'verbose': verbose,
             'learning_rate_start':  0.003,

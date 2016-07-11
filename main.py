@@ -1,6 +1,6 @@
 import tensorflow as tf
 import JacobsMazeWorld
-from DQN import dqn
+from DQN import DQN
 import GenericAgent
 
 ######################################################################################

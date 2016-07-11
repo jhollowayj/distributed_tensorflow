@@ -2,8 +2,6 @@ import numpy as np
 import tensorflow as tf
 import time
 
-import RProp
-
 class DQN:
     def __init__(self, wid=1, tid=1, aid=1,
             input_dims = 2, num_act = 4,
@@ -13,12 +11,15 @@ class DQN:
             requested_gpu_vram_percent=0.01,
             device_to_use=0, verbose = 0):
         self.params = {
+            'wid' : wid,
+            'tid' : tid,
+            'wid' : aid,
             'input_dims': input_dims,
             'layer_1_hidden': 1000,
             'layer_2_hidden': 1000,
             'num_act': num_act,
-            'discount': discount,
             'lr': lr,
+            'discount': discount,
             'rms_eps': rms_eps,
             'rms_decay': rms_decay,
             'rms_momentum': rms_momentum,
@@ -49,17 +50,17 @@ class DQN:
         layer_1_hidden = self.params['layer_1_hidden']
         layer_2_hidden = self.params['layer_2_hidden']
 
-        with tf.name_scope("world_{}".format(wid)):
+        with tf.name_scope("world_{}".format(self.params['wid'])):
             self.w1 = tf.get_variable("weight", shape=(self.params['input_dims'], layer_1_hidden), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
             self.b1 = tf.get_variable("bias", shape=(layer_1_hidden), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
             self.o1 = tf.nn.relu(tf.add(tf.matmul(self.x,self.w1),self.b1), name="output")
 
-        with tf.name_scope("task_{}".format(tid)):
+        with tf.name_scope("task_{}".format(self.params['tid'])):
             self.w2 = tf.get_variable("weight", shape=(layer_1_hidden, layer_2_hidden), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
             self.b2 = tf.get_variable("bias", shape=(layer_2_hidden), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
-            self.o2 = tf.nn.relu(tf.add(tf.matmul(self.o1,self.w2),self.b2, name="output")
+            self.o2 = tf.nn.relu(tf.add(tf.matmul(self.o1,self.w2),self.b2), name="output")
 
-        with tf.name_scope("agent_{}".format(aid)):
+        with tf.name_scope("agent_{}".format(self.params['aid'])):
             self.w2 = tf.get_variable("weight", shape=(layer_2_hidden, self.params['num_act']), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
             self.b2 = tf.get_variable("bias", shape=(self.params['num_act']), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
             self.y = tf.add(tf.matmul(self.o2,self.w3),self.b3, name="output_aka_y")

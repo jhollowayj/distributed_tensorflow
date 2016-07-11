@@ -124,8 +124,8 @@ class Agent:
 
     def train(self, allow_update=True):
         self.iterations += 1
-                if self.use_exp_replay:
-                S, A, R, T, NS = self._calc_training_data__exp_rep()
+        if self.use_exp_replay:
+            S, A, R, T, NS = self._calc_training_data__exp_rep()
         else:
             S, A, R, T, NS = self._calc_training_data_no_exp_rep()
         cost = self.train_fn(np.array(S), np.array(A), np.array(R), np.array(T), np.array(NS), allow_update)

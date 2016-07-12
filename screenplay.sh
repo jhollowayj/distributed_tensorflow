@@ -23,40 +23,54 @@ echo $COMMAND
 ###          EDDIT THIS PART;  IT WILL FILL OUT THE FORMS FOR YOU                 ###
 ###    (SADLY, I'M NOT SURE IF YOU CAN DO MORE THAN ONE CUDA DEVICE AT A TIME.)   ###
 #####################################################################################
-PS_HOSTNAMES=( morita hatch naga ghost infinity reaper potts santaka )
-PS_HOSTPORTS=( 2222   2222  2222 2222  2222     2222   2222  2222 )
-WK_HOSTNAMES_TRAIN=( morita infinity reaper ghost santaka potts naga hatch  morita infinity reaper ghost santaka potts naga hatch  morita infinity )
-WK_HOSTPORTS_TRAIN=( 2223   2223     2223   2223  2223    2223  2223 2223   2224   2224     2224   2224  2224    2224  2224 2224   2225   2225     )
-WK_WAT_IDS_TRAIN=("--world_id=1 --task_id=1 --agent_id=1" 
-                  "--world_id=1 --task_id=1 --agent_id=2"
-                  "--world_id=1 --task_id=2 --agent_id=1"
-                  "--world_id=1 --task_id=2 --agent_id=3"
-                  "--world_id=1 --task_id=3 --agent_id=2"
-                  "--world_id=1 --task_id=3 --agent_id=3"
-                  "--world_id=2 --task_id=1 --agent_id=1"
-                  "--world_id=2 --task_id=1 --agent_id=3"
-                  "--world_id=2 --task_id=2 --agent_id=2"
-                  "--world_id=2 --task_id=2 --agent_id=3"
-                  "--world_id=2 --task_id=3 --agent_id=1"
-                  "--world_id=2 --task_id=3 --agent_id=2"
-                  "--world_id=3 --task_id=1 --agent_id=2"
-                  "--world_id=3 --task_id=1 --agent_id=3"
-                  "--world_id=3 --task_id=2 --agent_id=1"
-                  "--world_id=3 --task_id=2 --agent_id=2"
-                  "--world_id=3 --task_id=3 --agent_id=1"
-                  "--world_id=3 --task_id=3 --agent_id=3" )
+# PS_HOSTNAMES=( morita hatch naga ghost infinity reaper potts santaka )
+# PS_HOSTPORTS=( 2222   2222  2222 2222  2222     2222   2222  2222 )
+# WK_HOSTNAMES_TRAIN=( morita infinity reaper ghost santaka potts naga hatch  morita infinity reaper ghost santaka potts naga hatch  morita infinity )
+# WK_HOSTPORTS_TRAIN=( 2223   2223     2223   2223  2223    2223  2223 2223   2224   2224     2224   2224  2224    2224  2224 2224   2225   2225     )
+# WK_WAT_IDS_TRAIN=("--world_id=1 --task_id=1 --agent_id=1" 
+#                   "--world_id=1 --task_id=1 --agent_id=2"
+#                   "--world_id=1 --task_id=2 --agent_id=1"
+#                   "--world_id=1 --task_id=2 --agent_id=3"
+#                   "--world_id=1 --task_id=3 --agent_id=2"
+#                   "--world_id=1 --task_id=3 --agent_id=3"
+#                   "--world_id=2 --task_id=1 --agent_id=1"
+#                   "--world_id=2 --task_id=1 --agent_id=3"
+#                   "--world_id=2 --task_id=2 --agent_id=2"
+#                   "--world_id=2 --task_id=2 --agent_id=3"
+#                   "--world_id=2 --task_id=3 --agent_id=1"
+#                   "--world_id=2 --task_id=3 --agent_id=2"
+#                   "--world_id=3 --task_id=1 --agent_id=2"
+#                   "--world_id=3 --task_id=1 --agent_id=3"
+#                   "--world_id=3 --task_id=2 --agent_id=1"
+#                   "--world_id=3 --task_id=2 --agent_id=2"
+#                   "--world_id=3 --task_id=3 --agent_id=1"
+#                   "--world_id=3 --task_id=3 --agent_id=3" )
 
-WK_HOSTNAMES_EVAL=( morita reaper ghost santaka potts naga hatch  infinity reaper)
-WK_HOSTPORTS_EVAL=( 2230   2230   2230  2230    2230  2230 2230   2230     2231)
-WK_WAT_IDS_EVAL=("--world_id=1 --task_id=1 --agent_id=3 --observer=True" 
-                 "--world_id=1 --task_id=2 --agent_id=2 --observer=True"
-                 "--world_id=1 --task_id=3 --agent_id=1 --observer=True"
-                 "--world_id=2 --task_id=1 --agent_id=2 --observer=True"
-                 "--world_id=2 --task_id=2 --agent_id=1 --observer=True"
-                 "--world_id=2 --task_id=3 --agent_id=3 --observer=True"
-                 "--world_id=3 --task_id=1 --agent_id=1 --observer=True"
-                 "--world_id=3 --task_id=2 --agent_id=3 --observer=True"
-                 "--world_id=3 --task_id=3 --agent_id=1 --observer=True" )
+# WK_HOSTNAMES_EVAL=( morita reaper ghost santaka potts naga hatch  infinity reaper)
+# WK_HOSTPORTS_EVAL=( 2230   2230   2230  2230    2230  2230 2230   2230     2231)
+# WK_WAT_IDS_EVAL=("--world_id=1 --task_id=1 --agent_id=3 --observer=True" 
+#                  "--world_id=1 --task_id=2 --agent_id=2 --observer=True"
+#                  "--world_id=1 --task_id=3 --agent_id=1 --observer=True"
+#                  "--world_id=2 --task_id=1 --agent_id=2 --observer=True"
+#                  "--world_id=2 --task_id=2 --agent_id=1 --observer=True"
+#                  "--world_id=2 --task_id=3 --agent_id=3 --observer=True"
+#                  "--world_id=3 --task_id=1 --agent_id=1 --observer=True"
+#                  "--world_id=3 --task_id=2 --agent_id=3 --observer=True"
+#                  "--world_id=3 --task_id=3 --agent_id=1 --observer=True" )
+#####################################################################################
+PS_HOSTNAMES=( santaka morita naga )
+PS_HOSTPORTS=( 2222    2222   2222 )
+WK_HOSTNAMES_TRAIN=( reaper infinity infinity  ghost )
+WK_HOSTPORTS_TRAIN=( 2223   2223     2223      2223  )
+WK_WAT_IDS_TRAIN=("--world_id=1 --task_id=1 --agent_id=1" 
+                  "--world_id=1 --task_id=1 --agent_id=2" 
+                  "--world_id=1 --task_id=2 --agent_id=1" 
+                  "--world_id=1 --task_id=2 --agent_id=3" )
+
+WK_HOSTNAMES_EVAL=( hatch morita )
+WK_HOSTPORTS_EVAL=( 2223  2223   )
+WK_WAT_IDS_EVAL=("--world_id=1 --task_id=1 --agent_id=3 --observer=True"
+                 "--world_id=1 --task_id=2 --agent_id=2 --observer=True" )
 #####################################################################################
 
 #####################################################################################
@@ -69,6 +83,7 @@ FILE='main.py'
 JN_PS="--job_name=ps"
 JN_WK="--job_name=worker"
 TID="--task_index"
+PRINT_HOSTNAME="echo; hostname; echo"
 #####################################################################################
 
 
@@ -152,14 +167,19 @@ elif [ "$COMMAND" = 'all' ]; then
 ###############################################
 
 elif [ "$COMMAND" = 'kill' ]; then
-  echo "\n\tKilling servers"
+  echo 
+  echo "============ Killing servers ============"
+  echo ${PS_HOSTPORTS[@]}
+  echo ${SSH_PS[@]}
   for i in "${!SSH_PS[@]}"; do 
     echo "$KILL ${PS_HOSTPORTS[$i]}/tcp;" | ssh ${SSH_PS[$i]} "bash -s"
   done
   # Kill WKs   ################################
-  echo "\n\tKilling Workers"
+  echo
+  echo "============ Killing Workers ============"
+  echo ${WK_HOSTPORTS_COMBINED[@]}
+  echo ${SSH_WK[@]}
   for i in "${!SSH_WK[@]}"; do
-    echo "$KILL ${PS_HOSTPORTS[$i]}/tcp;" | ssh ${SSH_PS[$i]} "bash -s"
     echo "$KILL ${WK_HOSTPORTS_COMBINED[$i]}/tcp;" | ssh ${SSH_WK[$i]} "bash -s"
   done
 
@@ -186,17 +206,24 @@ elif [ "$COMMAND" = 'clean' ]; then
 ###############################################
 
 elif [ "$COMMAND" = 'run' ]; then
+
+
   # LAUNCH PSs   ################################
+  server_tabs_cmd=""
   for i in "${!SSH_PS[@]}"; do 
-    gnome-terminal -e "ssh ${SSH_PS[$i]} '$CD; $CVD='' python $COMBINED $JN_PS $TID=$i'"
-    sleep 0.5
+    cmd="ssh ${SSH_PS[$i]} '$PRINT_HOSTNAME; $CD; $CVD=\"\" python $COMBINED $JN_PS $TID=$i'"
+    server_tabs_cmd+=(--tab -e "$cmd")
   done
+  
   # LAUNCH WKs   ################################
+  worker_tabs_cmd=""
   for i in "${!SSH_WK[@]}"; do 
-    # gnome-terminal -e "ssh ${SSH_WK[$i]} '$CD; $CVD=${WK_CVD_IDS[$i]} python $COMBINED $JN_WK $TID=$i ${WK_WAT[$i]}'" # GPU enabled
-    gnome-terminal -e "ssh ${SSH_WK[$i]} '$CD; $CVD='' python $COMBINED $JN_WK $TID=$i ${WK_WAT[$i]} ${WK_WorldAgentTaskIDs[$i]}'" # CPU ONLY
-    sleep 0.5
+    cmd="ssh ${SSH_WK[$i]} '$PRINT_HOSTNAME; $CD; $CVD=\"\" python $COMBINED $JN_WK $TID=$i ${WK_WorldAgentTaskIDs[$i]}'" # CPU only
+    # cmd="ssh ${SSH_WK[$i]} '$PRINT_HOSTNAME; $CD; $CVD=${WK_CVD_IDS[$i]} python $COMBINED $JN_WK $TID=$i ${WK_WorldAgentTaskIDs[$i]}'" # GPU enabled
+    worker_tabs_cmd+=(--tab -e "$cmd")
   done
+  gnome-terminal "${server_tabs_cmd[@]}"
+  gnome-terminal "${worker_tabs_cmd[@]}"
 fi
 
 ###############################################

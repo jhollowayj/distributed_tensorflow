@@ -2,33 +2,17 @@ import random
 import numpy as np
 
 class Agent:
-    def __init__(self, wid=1, tid=1, aid=1, dqn=None,
-                 state_size=None, number_of_actions=1, just_greedy=False, start_epsilon=1.0,
+    def __init__(self, dqn=None, number_of_actions=1, just_greedy=False, start_epsilon=1.0,
                  end_epsilon=0.1, batch_size=200, memory_size=10000, boltzman_softmax = False,
-                 save_name='basic', annealing_size=100, use_experience_replay=True,
-                 input_scaling_vector=None, allow_local_nn_weight_updates=False,
-                 learning_rate = 0.0002, momentum=0.0, discount = 0.90,
-                 requested_gpu_vram_percent = 0.01, device_to_use = 0):
-        self.world_id = wid
-        self.task_id = tid
-        self.agent_id = aid
-        self.state_size = state_size
+                 use_experience_replay=True, annealing_size=100):
         self.number_of_actions = number_of_actions
         self.start_epsilon = start_epsilon
         self.end_epsilon = end_epsilon
         self.batch_size = batch_size
-        self.learning_rate = learning_rate
-        self.momentum = momentum
-        self.discount = discount
-        self.save_name = save_name
         self.iterations = 0
         self.boltzman_softmax = boltzman_softmax
         self.annealing_size = annealing_size # number of steps, not number of games 
         self.just_greedy = just_greedy
-        self.input_scaling_vector = input_scaling_vector
-        self.allow_local_nn_weight_updates = allow_local_nn_weight_updates
-        self.requested_gpu_vram_percent = requested_gpu_vram_percent
-        self.device_to_use = device_to_use
         self.is_eval = False
         
         self.use_exp_replay = use_experience_replay
@@ -118,7 +102,7 @@ class Agent:
                 action = np.random.choice(self.number_of_actions, p=Probz/Probz.sum())
             else:
                 action = np.random.randint(self.number_of_actions)
-        else: 
+        else:
             action = values.argmax()
         return action, values
 
@@ -128,8 +112,8 @@ class Agent:
             S, A, R, T, NS = self._calc_training_data__exp_rep()
         else:
             S, A, R, T, NS = self._calc_training_data_no_exp_rep()
-        cost = self.train_fn(np.array(S), np.array(A), np.array(R), np.array(T), np.array(NS), allow_update)
-        return cost
+        cost, gstep = self.train_fn(np.array(S), np.array(A), np.array(R), np.array(T), np.array(NS), allow_update)
+        return cost, gstep
 
     def _calc_training_data__exp_rep(self):
         N = len(self.states)

@@ -7,9 +7,7 @@ class DQN:
             input_dims = 2, num_act = 4,
             eps = 1.0, discount = 0.90, lr = 0.0002,
             rms_eps = 1e-6, rms_decay=0.99, rms_momentum=0.0,
-            input_scaling_vector=None,
-            requested_gpu_vram_percent=0.01,
-            device_to_use=0, verbose = 0):
+            input_scaling_vector=None, verbose = 0):
         self.params = {
             'wid' : wid,
             'tid' : tid,
@@ -24,7 +22,6 @@ class DQN:
             'rms_decay': rms_decay,
             'rms_momentum': rms_momentum,
             'input_scaling_vector': None if input_scaling_vector is None else np.array(input_scaling_vector),
-            'requested_gpu_vram_percent': requested_gpu_vram_percent, 
             'verbose': verbose,
             'learning_rate_start':  0.003,
             'learning_rate_end':    0.003, #0.000001,
@@ -73,16 +70,17 @@ class DQN:
                                                         momentum=self.params['rms_momentum'],
                                                         epsilon=self.params['rms_eps']).minimize(self.cost)
     
-    def set_session(self, session):
-        self.sess = session 
+    def set_session(self, session, global_step_var):
+        self.sess = session
+        self.global_step_var = global_step_var 
     
     def train(self, states, actions, rewards, terminals, next_states, allow_update=True):
         q_target_max = np.amax(self.q(next_states), axis=1) # Pick the next state's best value to use in the reward (curRew + discount*(nextRew))
 
         feed_dict={self.x: self.scale_state_input(states), self.q_t: q_target_max, self.actions: actions, self.rewards: rewards, self.terminals:terminals}
-        _, costs = self.sess.run([self.rmsprop_min, self.cost], feed_dict=feed_dict)
+        step, _, costs = self.sess.run([self.global_step_var, self.rmsprop_min, self.cost], feed_dict=feed_dict)
 
-        return costs
+        return costs, step
         
     def q(self, states):
         return self.sess.run(self.y, feed_dict={self.x: self.scale_state_input(states)})

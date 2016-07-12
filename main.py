@@ -22,14 +22,13 @@ tf.app.flags.DEFINE_integer("world_id", 1, "Index of world")
 tf.app.flags.DEFINE_integer("task_id",  1, "Index of task") # don't confuse this with the distributed TF task_index
 tf.app.flags.DEFINE_integer("agent_id", 1, "Index of agent")
 
-
 tf.app.flags.DEFINE_boolean('random_starting_location', False, "If the world should start at a random location in maze")
 tf.app.flags.DEFINE_boolean('state_as_xy', False, "Reduces the state representation to a xy instead of onehot state")
 # AGENT
 tf.app.flags.DEFINE_integer('num_steps', 750000, "number of steps to take before hard-stopping the program (a max)")
 tf.app.flags.DEFINE_integer('annealing_size', 1500,  "exploration policy: Steps to go before we are reduced to greedy exploitation")
-tf.app.flags.DEFINE_float(  'start_epsilon', 1.0, " exploration policy: Starting epsilon")
-tf.app.flags.DEFINE_float(  'end_epsilon', 0.05,  "exploration policy: end epsilon")
+tf.app.flags.DEFINE_float  ('start_epsilon', 1.0, " exploration policy: Starting epsilon")
+tf.app.flags.DEFINE_float  ('end_epsilon', 0.05,  "exploration policy: end epsilon")
 tf.app.flags.DEFINE_boolean('boltzman_softmax', False, "Cant remember.  I think it's for selecting the action to take...")
 tf.app.flags.DEFINE_boolean('observer', False, "Wheither to update gradients or not.  NOT CURRENTLY IMPLEMENTED")
 tf.app.flags.DEFINE_boolean('use_experience_replay', False, "If true: keeps experience replay DB of size [memory].  False: simply replays that one game")
@@ -41,10 +40,10 @@ tf.app.flags.DEFINE_integer('steps_til_train', 150, "Kinda like a burn in period
 tf.app.flags.DEFINE_integer('batch_size', 250, "How big of a batch to pull for the experience replay to use.  ignored if [use_experience_replay] is false")
 # NEURAL-NET       #Discount Factor, Learning Rate, etc. TODO
 tf.app.flags.DEFINE_boolean('scale_input', False, "Scales the input to be between 0-1")
-tf.app.flags.DEFINE_float(  'discount_rate', 0.90, "Discount rate used in learner")
-tf.app.flags.DEFINE_float(  'learning_rate', 0.0001, "Learniing rate used in learner")
-tf.app.flags.DEFINE_float(  'momentum', 0.0, "Momentum used in learner") # 0 works well.
-tf.app.flags.DEFINE_float(  'requested_gpu_vram_percent', 0.02, "How much gpu vram to use (DistTF doesn't support it yet for some reason with 'sv.prepare_or_wait_for_session')")
+tf.app.flags.DEFINE_float  ('discount_rate', 0.90, "Discount rate used in learner")
+tf.app.flags.DEFINE_float  ('learning_rate', 0.0001, "Learniing rate used in learner")
+tf.app.flags.DEFINE_float  ('momentum', 0.0, "Momentum used in learner") # 0 works well.
+tf.app.flags.DEFINE_float  ('requested_gpu_vram_percent', 0.02, "How much gpu vram to use (DistTF doesn't support it yet for some reason with 'sv.prepare_or_wait_for_session')")
 tf.app.flags.DEFINE_integer('device_to_use', 1, "Which gpu device to use.  Probably 0 if using 'cuda_visible_devices=#' before the python command")
 # RUNNER
 tf.app.flags.DEFINE_integer('max_steps_per_episode', 150, "Number of steps the game can try before it's declared 'game over'")
@@ -61,9 +60,6 @@ if FLAGS.observer:
     FLAGS.start_epsilon = 0.08 # give him a little bit of random to get out of bad policies
     FLAGS.end_epsilon = 0.08   # give him a little bit of random to get out of bad policies
     FLAGS.annealing_size = 1
-
-world, dqn, agent = None, None, None
-max_q, min_q, sum_q, winning_cnt, running_score = None, None, None, None, None
 
 class Runner:
   def __init__(self, FLAGS):
@@ -84,7 +80,8 @@ class Runner:
     if self.FLAGS.job_name == "ps":
       server.join()
     elif self.FLAGS.job_name == "worker":
-      self.run_client(server)
+      with tf.device(tf.train.replica_device_setter(cluster=cluster)):
+        self.run_client(server)
       
   def run_client(self, server):
       saver, summary_op, init_op, global_step_var = self.build_classes_and_variables()
@@ -102,15 +99,20 @@ class Runner:
       gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1, allow_growth=True)
       print(gpu_options)
       with sv.prepare_or_wait_for_session(server.target, config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-        self.dqn.set_session(sess) # Give him a session.
+        self.dqn.set_session(sess, global_step_var) # Give him a session.
         print("\nSTARTING UP THE TRAINING STEPS =-=-=-=-=-=-=-=-=-=-=-=\n")
         sys.stdout.flush()
 
         step_cnt, update_cnt, eval_episode = 1, 1, 0
         max_q, min_q, sum_q, winning_cnt, running_score = self.reset_variables()
+        gstep = 0
         self.agent.reset_exp_db()
         # Time to play the game vvv
+        print "About to start..."
+        sys.stdout.flush()
         while not sv.should_stop() and step_cnt < self.FLAGS.num_steps:
+          # print "Global Step: {} || Local Step: {}".format(gstep, step_cnt)
+          sys.stdout.flush()
           self.world.reset()
           if self.is_eval_episode(update_cnt+eval_episode):
               eval_episode += 1
@@ -121,7 +123,7 @@ class Runner:
                   reward, max_q, min_q = self.run_world_one_step(max_q, min_q)
                   running_score += reward
               # Test your network & Report
-              cost = self.agent.train(False)
+              cost, gstep = self.agent.train(False)
               self.agent.set_exp_db(tmp_exp)  # Restore state
           else:
               self.agent.set_evaluate_flag(False)
@@ -131,8 +133,9 @@ class Runner:
                   step_cnt += 1
                   if step_cnt % self.FLAGS.steps_til_train == 0:
                       update_cnt += 1
-                      cost = self.agent.train()
+                      cost, gstep = self.agent.train()
                       max_q, min_q, sum_q, winning_cnt, running_score = self.reset_variables()
+                      self.print_to_console(False, update_cnt, running_score, max_q, cost, winning_cnt)
                       
           if self.world.get_time() != self.FLAGS.max_steps_per_episode:
               winning_cnt += 1
@@ -154,14 +157,13 @@ class Runner:
             input_scaling_vector=self.world.get_state__maxes() if self.FLAGS.scale_input else None, # Default None
             lr = self.FLAGS.learning_rate, 
             rms_momentum = self.FLAGS.momentum, 
-            discount = self.FLAGS.discount_rate,
-            requested_gpu_vram_percent = self.FLAGS.requested_gpu_vram_percent,
-            device_to_use = self.FLAGS.device_to_use)
-            
-      self.agent = GenericAgent.Agent( dqn=self.dqn,
+            discount = self.FLAGS.discount_rate)
+      
+      self.agent = GenericAgent.Agent(dqn=self.dqn, 
+            number_of_actions=len(self.world.get_action_space()), just_greedy=False,
             start_epsilon=self.FLAGS.start_epsilon,
             end_epsilon=self.FLAGS.end_epsilon,
-            batch_size=self.FLAGS.batch_size,
+            batch_size=self.FLAGS.batch_size, memory_size=10000, 
             boltzman_softmax= self.FLAGS.boltzman_softmax,
             use_experience_replay=self.FLAGS.use_experience_replay,
             annealing_size=int(self.FLAGS.annealing_size) )# annealing_size=self.FLAGS.annealing_size,

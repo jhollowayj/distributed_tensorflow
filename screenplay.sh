@@ -60,14 +60,14 @@ echo $COMMAND
 #####################################################################################
 PS_HOSTNAMES=( santaka morita naga )
 PS_HOSTPORTS=( 2222    2222   2222 )
-WK_HOSTNAMES_TRAIN=( reaper infinity infinity  ghost )
+WK_HOSTNAMES_TRAIN=( reaper potts infinity  ghost )
 WK_HOSTPORTS_TRAIN=( 2223   2223     2223      2223  )
 WK_WAT_IDS_TRAIN=("--world_id=1 --task_id=1 --agent_id=1" 
                   "--world_id=1 --task_id=1 --agent_id=2" 
                   "--world_id=1 --task_id=2 --agent_id=1" 
                   "--world_id=1 --task_id=2 --agent_id=3" )
 
-WK_HOSTNAMES_EVAL=( hatch morita )
+WK_HOSTNAMES_EVAL=( santaka morita )
 WK_HOSTPORTS_EVAL=( 2223  2223   )
 WK_WAT_IDS_EVAL=("--world_id=1 --task_id=1 --agent_id=3 --observer=True"
                  "--world_id=1 --task_id=2 --agent_id=2 --observer=True" )
@@ -218,8 +218,9 @@ elif [ "$COMMAND" = 'run' ]; then
   # LAUNCH WKs   ################################
   worker_tabs_cmd=""
   for i in "${!SSH_WK[@]}"; do 
-    cmd="ssh ${SSH_WK[$i]} '$PRINT_HOSTNAME; $CD; $CVD=\"\" python $COMBINED $JN_WK $TID=$i ${WK_WorldAgentTaskIDs[$i]}'" # CPU only
+    # cmd="ssh ${SSH_WK[$i]} '$PRINT_HOSTNAME; $CD; $CVD=\"\" python $COMBINED $JN_WK $TID=$i ${WK_WorldAgentTaskIDs[$i]}'" # CPU only
     # cmd="ssh ${SSH_WK[$i]} '$PRINT_HOSTNAME; $CD; $CVD=${WK_CVD_IDS[$i]} python $COMBINED $JN_WK $TID=$i ${WK_WorldAgentTaskIDs[$i]}'" # GPU enabled
+    cmd="ssh ${SSH_WK[$i]} '$PRINT_HOSTNAME; $CD; $CVD=0 python $COMBINED $JN_WK $TID=$i ${WK_WorldAgentTaskIDs[$i]}'" # GPU enabled
     worker_tabs_cmd+=(--tab -e "$cmd")
   done
   gnome-terminal "${server_tabs_cmd[@]}"

@@ -28,8 +28,6 @@ class DQN:
             'learning_rate_decay':  3000,
         }
 
-        self.build_network_variables()
-        
     def build_network_variables(self):
         with tf.name_scope("placeholders"):
             self.x = tf.placeholder(tf.float32,[None, self.params['input_dims']], name="nn_x")
@@ -43,19 +41,31 @@ class DQN:
         layer_1_hidden = self.params['layer_1_hidden']
         layer_2_hidden = self.params['layer_2_hidden']
 
+        w1s, b1s, w2s, b2s, w3s, b3s = {}, {}, {}, {}, {}, {}
+        
+        for i in range(3):
+            with tf.variable_scope("world_{}".format(self.params['wid'])):
+                w1s[i] = tf.get_variable("weight", shape=(self.params['input_dims'], layer_1_hidden), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
+                b1s[i] = tf.get_variable("bias", shape=(layer_1_hidden), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
+            
+            with tf.variable_scope("task_{}".format(self.params['tid'])):
+                w2s[i] = tf.get_variable("weight", shape=(layer_1_hidden, layer_2_hidden), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
+                b2s[i] = tf.get_variable("bias", shape=(layer_2_hidden), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
+            
+            with tf.variable_scope("agent_{}".format(self.params['aid'])):
+                w3s[i] = tf.get_variable("weight", shape=(layer_2_hidden, self.params['num_act']), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
+                b3s[i] = tf.get_variable("bias", shape=(self.params['num_act']), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
+
+        self.w1, self.b1 = w1s[self.params['wid']], b1s[self.params['wid']]
+        self.w2, self.b2 = w2s[self.params['tid']], b2s[self.params['tid']]
+        self.w3, self.b3 = w3s[self.params['aid']], b3s[self.params['aid']]
+        
+    def build_network_computations(self):
         with tf.variable_scope("world_{}".format(self.params['wid'])):
-            self.w1 = tf.get_variable("weight", shape=(self.params['input_dims'], layer_1_hidden), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
-            self.b1 = tf.get_variable("bias", shape=(layer_1_hidden), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
             self.o1 = tf.nn.relu(tf.add(tf.matmul(self.x,self.w1),self.b1), name="output")
-
         with tf.variable_scope("task_{}".format(self.params['tid'])):
-            self.w2 = tf.get_variable("weight", shape=(layer_1_hidden, layer_2_hidden), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
-            self.b2 = tf.get_variable("bias", shape=(layer_2_hidden), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
             self.o2 = tf.nn.relu(tf.add(tf.matmul(self.o1,self.w2),self.b2), name="output")
-
         with tf.variable_scope("agent_{}".format(self.params['aid'])):
-            self.w3 = tf.get_variable("weight", shape=(layer_2_hidden, self.params['num_act']), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
-            self.b3 = tf.get_variable("bias", shape=(self.params['num_act']), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
             self.y = tf.add(tf.matmul(self.o2,self.w3),self.b3, name="output_aka_y")
 
         #Q,Cost,Optimizer

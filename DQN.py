@@ -70,9 +70,9 @@ class DQN:
                     b3s[i] = tf.get_variable("bias", shape=(self.params['num_act']), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
         
         # Build the network here!
-        for w in range(1,4): # Yuck... :(
-            for t in range(1,4):
-                for a in range(1,4):
+        for w in range(1,4): # Yuck... :( but it works.  We have to initiallize *all* of the variables on all of the worker nodes
+            for t in range(1,4):  # So that the cheif worker (who is the only one authorized to do the actual initializing) can do
+                for a in range(1,4):  # What he needs to do.  Then, once that's done, each worker can grab what he needs.  (see build_worker_specific_variables below)
                     # WORLD
                     with tf.variable_scope("world_{}".format(w)):
                         o1 = tf.nn.relu(tf.add(tf.matmul(self.x,w1s[w]),b1s[w]), name="output")

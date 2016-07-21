@@ -58,17 +58,24 @@ echo $COMMAND
 #                  "--world_id=3 --task_id=2 --agent_id=3 --observer=True"
 #                  "--world_id=3 --task_id=3 --agent_id=1 --observer=True" )
 #####################################################################################
+
+##### PARAMETER SERVERS #####
+# PS_HOSTNAMES=( reaper potts infinity  ghost santaka morita )
+# PS_HOSTPORTS=( 2222   2222  2222      2222  2222    2222   )
 PS_HOSTNAMES=( santaka morita naga )
 PS_HOSTPORTS=( 2222    2222   2222 )
-WK_HOSTNAMES_TRAIN=( reaper potts infinity  ghost )
-WK_HOSTPORTS_TRAIN=( 2223   2223     2223      2223  )
+
+##### WORKERS: LEARNING #####
+WK_HOSTNAMES_TRAIN=( reaper potts infinity  hatch )
+WK_HOSTPORTS_TRAIN=( 2223   2223  2223      2223  )
 WK_WAT_IDS_TRAIN=("--world_id=1 --task_id=1 --agent_id=1" 
                   "--world_id=1 --task_id=1 --agent_id=2" 
                   "--world_id=1 --task_id=2 --agent_id=1" 
                   "--world_id=1 --task_id=2 --agent_id=3" )
 
+##### WORKERS: EVALUATORS #####
 WK_HOSTNAMES_EVAL=( santaka morita )
-WK_HOSTPORTS_EVAL=( 2223  2223   )
+WK_HOSTPORTS_EVAL=( 2223    2223   )
 WK_WAT_IDS_EVAL=("--world_id=1 --task_id=1 --agent_id=3 --observer=True"
                  "--world_id=1 --task_id=2 --agent_id=2 --observer=True" )
 #####################################################################################

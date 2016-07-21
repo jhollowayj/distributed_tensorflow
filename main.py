@@ -82,20 +82,15 @@ class Runner:
         if self.FLAGS.job_name == "ps":
             server.join()
         elif self.FLAGS.job_name == "worker":
-            # print "=============== msg "
-            # print "=============== I'm a worker!!!!"
-            with tf.device(tf.train.replica_device_setter(cluster=cluster)):
-                # print "=============== building network variables "
-                self.dqn.build_network_variables() # Assign the variables to parameter servers
+            with tf.device(tf.train.replica_device_setter(cluster=cluster)): # not sure what this does either TODO
+                self.dqn.build_network_variables() # Assign the variables to parameter servers, build all of the graphs 
                 with tf.name_scope('global_vars'):
                     global_step_var = tf.Variable(0)
-            with tf.device("/job:worker/task:{}/cpu:0".format(FLAGS.task_index)):
-                # print "=============== building computations "
-                self.dqn.build_network_computations() # But let the computations live locally on the gpu
+            self.dqn.build_worker_specific_variables() # Kinda hoping this works... :)
 
             # Run all the initializers to prepare the trainable parameters.
             with tf.device(tf.train.replica_device_setter(
-                               worker_device="/job:worker/task:%d" % FLAGS.task_index,
+                               worker_device="/job:worker/task:%d" % FLAGS.task_index, # What does this line do? TODO
                                cluster=cluster)):
                 # print "=============== createing saver, summary, init ops"
                 saver = tf.train.Saver()                # dist

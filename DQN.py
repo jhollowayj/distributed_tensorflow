@@ -2,6 +2,11 @@ import numpy as np
 import tensorflow as tf
 import time
 
+class Vividict(dict):
+    def __missing__(self, key):
+        value = self[key] = type(self)()
+        return value
+
 class DQN:
     def __init__(self, wid=1, tid=1, aid=1,
             input_dims = 2, num_act = 4,
@@ -36,49 +41,62 @@ class DQN:
             self.actions = tf.placeholder(tf.float32, [None, self.params['num_act']], name="nn_actions")
             self.rewards = tf.placeholder(tf.float32, [None], name="nn_rewards")
             self.terminals = tf.placeholder(tf.float32, [None], name="nn_terminals")
+        with tf.name_scope("Shared_stuff"):
+            discount = tf.constant(self.params['discount'], name="discount") # only need one constant.  :)
+            self.yj = tf.add(self.rewards, tf.mul(1.0-self.terminals, tf.mul(discount, self.q_t)), name="true_y")
 
         ### Network ###
         layer_1_hidden = self.params['layer_1_hidden']
         layer_2_hidden = self.params['layer_2_hidden']
 
         w1s, b1s, w2s, b2s, w3s, b3s = {}, {}, {}, {}, {}, {}
+        self.ys, self.Q_preds, self.costs, self.rmsprop_mins = Vividict(), Vividict(), Vividict(), Vividict()
         
-        for i in range(3):
-            with tf.variable_scope("world_{}".format(self.params['wid'])):
-                w1s[i] = tf.get_variable("weight", shape=(self.params['input_dims'], layer_1_hidden), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
-                b1s[i] = tf.get_variable("bias", shape=(layer_1_hidden), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
+        # Weights and Biases
+        for i in range(1,4):
+            with tf.device("/job:ps/task:0"):
+                with tf.variable_scope("world_{}".format(i)):
+                    w1s[i] = tf.get_variable("weight", shape=(self.params['input_dims'], layer_1_hidden), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
+                    b1s[i] = tf.get_variable("bias", shape=(layer_1_hidden), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
             
-            with tf.variable_scope("task_{}".format(self.params['tid'])):
-                w2s[i] = tf.get_variable("weight", shape=(layer_1_hidden, layer_2_hidden), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
-                b2s[i] = tf.get_variable("bias", shape=(layer_2_hidden), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
+            with tf.device("/job:ps/task:1"):
+                with tf.variable_scope("task_{}".format(i)):
+                    w2s[i] = tf.get_variable("weight", shape=(layer_1_hidden, layer_2_hidden), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
+                    b2s[i] = tf.get_variable("bias", shape=(layer_2_hidden), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
             
-            with tf.variable_scope("agent_{}".format(self.params['aid'])):
-                w3s[i] = tf.get_variable("weight", shape=(layer_2_hidden, self.params['num_act']), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
-                b3s[i] = tf.get_variable("bias", shape=(self.params['num_act']), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
-
-        self.w1, self.b1 = w1s[self.params['wid']], b1s[self.params['wid']]
-        self.w2, self.b2 = w2s[self.params['tid']], b2s[self.params['tid']]
-        self.w3, self.b3 = w3s[self.params['aid']], b3s[self.params['aid']]
+            with tf.device("/job:ps/task:2"):
+                with tf.variable_scope("agent_{}".format(i)):
+                    w3s[i] = tf.get_variable("weight", shape=(layer_2_hidden, self.params['num_act']), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
+                    b3s[i] = tf.get_variable("bias", shape=(self.params['num_act']), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
         
-    def build_network_computations(self):
-        with tf.variable_scope("world_{}".format(self.params['wid'])):
-            self.o1 = tf.nn.relu(tf.add(tf.matmul(self.x,self.w1),self.b1), name="output")
-        with tf.variable_scope("task_{}".format(self.params['tid'])):
-            self.o2 = tf.nn.relu(tf.add(tf.matmul(self.o1,self.w2),self.b2), name="output")
-        with tf.variable_scope("agent_{}".format(self.params['aid'])):
-            self.y = tf.add(tf.matmul(self.o2,self.w3),self.b3, name="output_aka_y")
+        # Build the network here!
+        for w in range(1,4): # Yuck... :(
+            for t in range(1,4):
+                for a in range(1,4):
+                    # WORLD
+                    with tf.variable_scope("world_{}".format(w)):
+                        o1 = tf.nn.relu(tf.add(tf.matmul(self.x,w1s[w]),b1s[w]), name="output")
+                    # TASK
+                    with tf.variable_scope("task_{}".format(t)):
+                        o2 = tf.nn.relu(tf.add(tf.matmul(o1,w2s[t]),b2s[t]), name="output")
+                    # AGENT
+                    with tf.variable_scope("agent_{}".format(a)):
+                        self.ys[w][t][a] = tf.add(tf.matmul(o2,w3s[a]),b3s[a], name="output_y")
 
-        #Q,Cost,Optimizer
-        with tf.variable_scope("optimizer"):
-            self.discount = tf.constant(self.params['discount'], name="discount")
-            self.yj = tf.add(self.rewards, tf.mul(1.0-self.terminals, tf.mul(self.discount, self.q_t)), name="true_y")
-            self.Q_pred = tf.reduce_sum(tf.mul(self.y,self.actions), reduction_indices=1, name="q_pred")
-            self.cost = tf.reduce_sum(tf.pow(tf.sub(self.yj, self.Q_pred), 2), name="cost")
-            
-            self.rmsprop_min = tf.train.RMSPropOptimizer(learning_rate=self.params['lr'],
-                                                        decay=self.params['rms_decay'],
-                                                        momentum=self.params['rms_momentum'],
-                                                        epsilon=self.params['rms_eps']).minimize(self.cost)
+                    #Q,Cost,Optimizer for that WTA set
+                    with tf.variable_scope("optimizer_{}.{}.{}".format(w,t,a)):
+                        self.Q_preds[w][t][a] = tf.reduce_sum(tf.mul(self.ys[w][t][a],self.actions), reduction_indices=1, name="q_pred")
+                        self.costs[w][t][a] = tf.reduce_sum(tf.pow(tf.sub(self.yj, self.Q_preds[w][t][a]), 2), name="cost")
+                        
+                        self.rmsprop_mins[w][t][a] = tf.train.RMSPropOptimizer(learning_rate=self.params['lr'],
+                                                                    decay=self.params['rms_decay'],
+                                                                    momentum=self.params['rms_momentum'],
+                                                                    epsilon=self.params['rms_eps']).minimize(self.costs[w][t][a])
+    
+    def build_worker_specific_variables(self):
+        self.rmsprop_min = self.rmsprop_mins[self.params['wid']][self.params['tid']][self.params['aid']]
+        self.cost = self.costs[self.params['wid']][self.params['tid']][self.params['aid']]
+        self.y = self.ys[self.params['wid']][self.params['tid']][self.params['aid']]
     
     def set_session(self, session, global_step_var):
         self.sess = session

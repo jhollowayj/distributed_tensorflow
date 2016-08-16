@@ -69,13 +69,15 @@ class Runner:
         ps_hosts = self.FLAGS.ps_hosts.split(",")
         worker_hosts = self.FLAGS.worker_hosts.split(",")
 
-          # Create a cluster from the parameter server and worker hosts.
+        # Create a cluster from the parameter server and worker hosts.
         cluster = tf.train.ClusterSpec({"ps": ps_hosts, "worker": worker_hosts})
 
-          # Create and start a server for the local task.
+        # Create and start a server for the local task.
+        gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1, allow_growth=True)
         server = tf.train.Server(cluster,
                                 job_name=self.FLAGS.job_name,
                                 task_index=self.FLAGS.task_index)
+                                # config=tf.ConfigProto(gpu_options=gpu_options)) Will be available in the next release
         self.build_classes()
 
           ##########################################################################################
@@ -84,10 +86,12 @@ class Runner:
         elif self.FLAGS.job_name == "worker":
             with tf.device(tf.train.replica_device_setter(cluster=cluster)): # not sure what this does either TODO
                 self.dqn.build_network_variables() # Assign the variables to parameter servers, build all of the graphs 
-                with tf.name_scope('global_vars'):
-                    global_step_var = tf.Variable(0)
+                with tf.device("/job:ps/task:0"):
+                    with tf.name_scope('global_vars'):
+                        global_step_var = tf.Variable(0)
+                        global_step_inc = global_step_var.assign_add(tf.constant(1))
             self.dqn.build_worker_specific_variables() # Kinda hoping this works... :)
-
+            
             # Run all the initializers to prepare the trainable parameters.
             with tf.device(tf.train.replica_device_setter(
                                worker_device="/job:worker/task:%d" % FLAGS.task_index, # What does this line do? TODO
@@ -108,11 +112,11 @@ class Runner:
                                     save_model_secs=600)
             ###################################################################################
 
-            gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1, allow_growth=True)
             start_time = time.time()
             print "=============== about to generate a sess (prepare_or_wait_for_session) "
-            with sv.prepare_or_wait_for_session(server.target, config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
-                self.dqn.set_session(sess, global_step_var) # Give him a session.
+            with sv.prepare_or_wait_for_session(server.target) as sess:
+                self.dqn.set_session(sess, global_step_inc) # Give him a session.
+                
                 print("\nSTARTING UP THE TRAINING STEPS =-=-=-=-=-=-=-=-=-=-=-=\n")
                 sys.stdout.flush()
       
@@ -125,6 +129,8 @@ class Runner:
                 sys.stdout.flush()
                 while not sv.should_stop() and step_cnt < self.FLAGS.num_steps:
                     # print "Global Step: {} || Local Step: {}".format(gstep, step_cnt)
+                    print self.agent.model.test_local_tf_vars(), step_cnt # TODO remove this test
+
                     sys.stdout.flush()
                     self.world.reset()
                     if self.is_eval_episode(update_cnt+eval_episode):
@@ -153,7 +159,7 @@ class Runner:
                     if self.world.get_time() != self.FLAGS.max_steps_per_episode:
                         winning_cnt += 1
         
-              # Once done, ask for all the services to stop.
+                # Once done, ask for all the services to stop.
             sv.stop()
 
     def build_classes(self):

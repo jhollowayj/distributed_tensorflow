@@ -51,8 +51,6 @@ class DQN:
 
         w1s, b1s, w2s, b2s, w3s, b3s = {}, {}, {}, {}, {}, {}
         self.ys, self.Q_preds, self.costs, self.rmsprop_mins = Vividict(), Vividict(), Vividict(), Vividict()
-        
-        # Weights and Biases
         for i in range(1,4):
             with tf.device("/job:ps/task:0"):
                 with tf.variable_scope("world_{}".format(i)):
@@ -87,26 +85,27 @@ class DQN:
                     with tf.variable_scope("optimizer_{}.{}.{}".format(w,t,a)):
                         self.Q_preds[w][t][a] = tf.reduce_sum(tf.mul(self.ys[w][t][a],self.actions), reduction_indices=1, name="q_pred")
                         self.costs[w][t][a] = tf.reduce_sum(tf.pow(tf.sub(self.yj, self.Q_preds[w][t][a]), 2), name="cost")
-                        
-                        self.rmsprop_mins[w][t][a] = tf.train.RMSPropOptimizer(learning_rate=self.params['lr'],
-                                                                    decay=self.params['rms_decay'],
-                                                                    momentum=self.params['rms_momentum'],
-                                                                    epsilon=self.params['rms_eps']).minimize(self.costs[w][t][a])
+
+                        self.rmsprop_mins[w][t][a] = tf.train.RMSPropOptimizer(
+                            learning_rate=self.params['lr'],
+                            decay=self.params['rms_decay'],
+                            momentum=self.params['rms_momentum'],
+                            epsilon=self.params['rms_eps']).minimize(self.costs[w][t][a])                        
     
     def build_worker_specific_variables(self):
         self.rmsprop_min = self.rmsprop_mins[self.params['wid']][self.params['tid']][self.params['aid']]
         self.cost = self.costs[self.params['wid']][self.params['tid']][self.params['aid']]
         self.y = self.ys[self.params['wid']][self.params['tid']][self.params['aid']]
-    
-    def set_session(self, session, global_step_var):
+
+    def set_session(self, session, global_step_inc):
         self.sess = session
-        self.global_step_var = global_step_var 
+        self.global_step_inc = global_step_inc 
     
     def train(self, states, actions, rewards, terminals, next_states, allow_update=True):
         q_target_max = np.amax(self.q(next_states), axis=1) # Pick the next state's best value to use in the reward (curRew + discount*(nextRew))
 
         feed_dict={self.x: self.scale_state_input(states), self.q_t: q_target_max, self.actions: actions, self.rewards: rewards, self.terminals:terminals}
-        step, _, costs = self.sess.run([self.global_step_var, self.rmsprop_min, self.cost], feed_dict=feed_dict)
+        step, _, costs = self.sess.run([self.global_step_inc, self.rmsprop_min, self.cost], feed_dict=feed_dict)
 
         return costs, step
         

@@ -2,11 +2,6 @@ import numpy as np
 import tensorflow as tf
 import time
 
-class Vividict(dict):
-    def __missing__(self, key):
-        value = self[key] = type(self)()
-        return value
-
 class DQN:
     def __init__(self, wid=1, tid=1, aid=1,
             input_dims = 2, num_act = 4,
@@ -34,6 +29,36 @@ class DQN:
         }
 
     def build_network_variables(self):
+        # CREATE Storage Variables on the various Parameter Servers
+        self.w1s, self.b1s, self.w2s, self.b2s, self.w3s, self.b3s = {}, {}, {}, {}, {}, {}
+        for i in range(1,4):
+            with tf.device("/job:ps/task:0"):
+                with tf.variable_scope("world_{}".format(i)):
+                    self.w1s[i] = tf.get_variable("weight", shape=(self.params['input_dims'], self.params['layer_1_hidden']), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
+                    self.b1s[i] = tf.get_variable("bias", shape=(self.params['layer_1_hidden']), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
+            
+            with tf.device("/job:ps/task:1"):
+                with tf.variable_scope("task_{}".format(i)):
+                    self.w2s[i] = tf.get_variable("weight", shape=(self.params['layer_1_hidden'], self.params['layer_2_hidden']), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
+                    self.b2s[i] = tf.get_variable("bias", shape=(self.params['layer_2_hidden']), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
+            
+            with tf.device("/job:ps/task:2"):
+                with tf.variable_scope("agent_{}".format(i)):
+                    self.w3s[i] = tf.get_variable("weight", shape=(self.params['layer_2_hidden'], self.params['num_act']), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
+                    self.b3s[i] = tf.get_variable("bias", shape=(self.params['num_act']), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
+        self.global_weights = [self.w1s, self.b1s, self.w2s, self.b2s, self.w3s, self.b3s]
+
+    def build_worker_specific_model(self, worker_id):
+        w, t, a, = self.params['wid'], self.params['tid'], self.params['aid']
+        
+        # Build local variables on each computer, sync with server in other functions.
+        with tf.device("/cpu:0"): # I might want to do "/worker/task{}/cpu:0".format(taskid) instead...
+            with tf.device("/gpu:0"): # TODO add in soft placement when you can...
+                with tf.variable_scope("worker_{}_w{}.t{}.a{}".format(worker_id, w,t,a)):
+                    self.__build_local_graph(): # it was getting too deep...
+        self.__build_sync_functions()
+
+    def __build_local_graph(self):
         with tf.name_scope("placeholders"):
             self.x = tf.placeholder(tf.float32,[None, self.params['input_dims']], name="nn_x")
             self.q_t = tf.placeholder(tf.float32,[None], name="nn_q_t")
@@ -41,71 +66,67 @@ class DQN:
             self.actions = tf.placeholder(tf.float32, [None, self.params['num_act']], name="nn_actions")
             self.rewards = tf.placeholder(tf.float32, [None], name="nn_rewards")
             self.terminals = tf.placeholder(tf.float32, [None], name="nn_terminals")
-        with tf.name_scope("Shared_stuff"):
-            discount = tf.constant(self.params['discount'], name="discount") # only need one constant.  :)
-            self.yj = tf.add(self.rewards, tf.mul(1.0-self.terminals, tf.mul(discount, self.q_t)), name="true_y")
 
-        ### Network ###
-        layer_1_hidden = self.params['layer_1_hidden']
-        layer_2_hidden = self.params['layer_2_hidden']
+        discount = tf.constant(self.params['discount'], name="discount") # only need one constant.  :)
 
-        w1s, b1s, w2s, b2s, w3s, b3s = {}, {}, {}, {}, {}, {}
-        self.ys, self.Q_preds, self.costs, self.rmsprop_mins = Vividict(), Vividict(), Vividict(), Vividict()
-        for i in range(1,4):
-            with tf.device("/job:ps/task:0"):
-                with tf.variable_scope("world_{}".format(i)):
-                    w1s[i] = tf.get_variable("weight", shape=(self.params['input_dims'], layer_1_hidden), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
-                    b1s[i] = tf.get_variable("bias", shape=(layer_1_hidden), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
-            
-            with tf.device("/job:ps/task:1"):
-                with tf.variable_scope("task_{}".format(i)):
-                    w2s[i] = tf.get_variable("weight", shape=(layer_1_hidden, layer_2_hidden), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
-                    b2s[i] = tf.get_variable("bias", shape=(layer_2_hidden), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
-            
-            with tf.device("/job:ps/task:2"):
-                with tf.variable_scope("agent_{}".format(i)):
-                    w3s[i] = tf.get_variable("weight", shape=(layer_2_hidden, self.params['num_act']), dtype=tf.float32, initializer=tf.truncated_normal_initializer())
-                    b3s[i] = tf.get_variable("bias", shape=(self.params['num_act']), dtype=tf.float32, initializer=tf.constant_initializer(0.1))
+        # Just zeros, since we'll reset their weights from the PS variables anyway...
+        self.local_weights = []
+        with tf.variable_scope("world_{}".format(w)):
+            w = tf.Variable(tf.zeros(shape=tf.shape(self.w1s[self.params['wid']]), dtype=tf.float32, name="weight"))
+            b = tf.Variable(tf.zeros(shape=tf.shape(self.b1s[self.params['wid']]), dtype=tf.float32, name="bias"))
+            o = tf.nn.relu(tf.add(tf.matmul(self.x,w), b), name="output")
+            weights.append(w)
+            weights.append(b)
+        # TASK
+        with tf.variable_scope("task_{}".format(t)):
+            w = tf.Variable(tf.zeros(shape=tf.shape(self.w2s[self.params['tid']]), dtype=tf.float32, name="weight"))
+            b = tf.Variable(tf.zeros(shape=tf.shape(self.b2s[self.params['tid']]), dtype=tf.float32, name="bias"))
+            o = tf.nn.relu(tf.add(tf.matmul(o,w), b), name="output")
+            weights.append(w)
+            weights.append(b)
+        # AGENT
+        with tf.variable_scope("agent_{}".format(a)):
+            w = tf.Variable(tf.zeros(shape=tf.shape(self.w3s[self.params['aid']]), dtype=tf.float32, name="weight"))
+            b = tf.Variable(tf.zeros(shape=tf.shape(self.b3s[self.params['aid']]), dtype=tf.float32, name="bias"))
+            self.y = tf.add(tf.matmul(o,w), b, name="output_y")
+            weights.append(w)
+            weights.append(b)
+
+        #TODO Grab start weights
+        #TODO Grab end weights
+        #TODO Grab Delta of end-start
+        #TODO Stash Delta somewhere?  OR do I just sync every time?  # SYNC every time
+        start_vars = [tf.identity(local_w) for local_w in self.local_weights]
+        end_vars   = [tf.identity(local_w) for local_w in self.local_weights]
         
-        # Build the network here!
-        for w in range(1,4): # Yuck... :( but it works.  We have to initiallize *all* of the variables on all of the worker nodes
-            for t in range(1,4):  # So that the cheif worker (who is the only one authorized to do the actual initializing) can do
-                for a in range(1,4):  # What he needs to do.  Then, once that's done, each worker can grab what he needs.  (see build_worker_specific_variables below)
-                    # WORLD
-                    with tf.variable_scope("world_{}".format(w)):
-                        o1 = tf.nn.relu(tf.add(tf.matmul(self.x,w1s[w]),b1s[w]), name="output")
-                    # TASK
-                    with tf.variable_scope("task_{}".format(t)):
-                        o2 = tf.nn.relu(tf.add(tf.matmul(o1,w2s[t]),b2s[t]), name="output")
-                    # AGENT
-                    with tf.variable_scope("agent_{}".format(a)):
-                        self.ys[w][t][a] = tf.add(tf.matmul(o2,w3s[a]),b3s[a], name="output_y")
-
-                    #Q,Cost,Optimizer for that WTA set
-                    with tf.variable_scope("optimizer_{}.{}.{}".format(w,t,a)):
-                        self.Q_preds[w][t][a] = tf.reduce_sum(tf.mul(self.ys[w][t][a],self.actions), reduction_indices=1, name="q_pred")
-                        self.costs[w][t][a] = tf.reduce_sum(tf.pow(tf.sub(self.yj, self.Q_preds[w][t][a]), 2), name="cost")
-
-                        self.rmsprop_mins[w][t][a] = tf.train.RMSPropOptimizer(
-                            learning_rate=self.params['lr'],
-                            decay=self.params['rms_decay'],
-                            momentum=self.params['rms_momentum'],
-                            epsilon=self.params['rms_eps']).minimize(self.costs[w][t][a])                        
+        #Q, Cost, Optimizer, etc.
+        with tf.variable_scope("optimizer"):
+            self.yj = tf.add(self.rewards, tf.mul(1.0-self.terminals, tf.mul(discount, self.q_t)), name="true_y")
+            self.Q_pred = tf.reduce_sum(tf.mul(self.y, self.actions), reduction_indices=1, name="q_pred")
+            self.cost = tf.reduce_sum(tf.pow(tf.sub(self.yj, self.Q_pred), 2), name="cost")
+            self.rmsprop_min = tf.train.RMSPropOptimizer(
+                learning_rate=self.params['lr'],
+                decay=self.params['rms_decay'],
+                momentum=self.params['rms_momentum'],
+                epsilon=self.params['rms_eps']).minimize(self.cost)
     
-    def build_worker_specific_variables(self):
-        self.rmsprop_min = self.rmsprop_mins[self.params['wid']][self.params['tid']][self.params['aid']]
-        self.cost = self.costs[self.params['wid']][self.params['tid']][self.params['aid']]
-        self.y = self.ys[self.params['wid']][self.params['tid']][self.params['aid']]
-        with tf.device("/cpu:0"): # Adding local variables to get session as a test
-            self.www = tf.Variable(self.params['wid'])
-            self.ttt = tf.Variable(self.params['tid'])
-            self.aaa = tf.Variable(self.params['aid'])
-            
+        ### build_sync_functions ###
+        w, t, a = self.params['wid'], self.params['tid'], self.params['aid']
+        global_ids = [w, w, t, t, a, a]
+        self.sync_pushup_ops = [global_w[id].assign_add(local_d) for (local_d, global_w, id) in zip(self.local_deltas,  self.global_weights, global_ids)] 
+        self.sync_pulldown_ops = [local_w.assign(global_w[id])   for (local_w, global_w, id) in zip(self.local_weights, self.global_weights, global_ids)] 
+        # WE could maybe do something with tf.get_Variable(global/world1/weight).assign(tf.get_variable(local/world1/weight))
+        # maybe using the name, and replace local with global, etc.
+        # It certainly needs to be more dynamic!  That's for sure.
+        
+    def sync_with_param_server(self):
+        pass
+        
     def set_session(self, session, global_step_inc, global_step_var):
         self.sess = session
         self.global_step_inc = global_step_inc 
         self.global_step_var = global_step_var 
-    
+
     def train(self, states, actions, rewards, terminals, next_states, allow_update=True):
         q_target_max = np.amax(self.q(next_states), axis=1) # Pick the next state's best value to use in the reward (curRew + discount*(nextRew))
 
@@ -123,6 +144,3 @@ class DQN:
             return state_to_scale
         else:
             return np.array(state_to_scale) / self.params['input_scaling_vector']
-        
-    def test_local_and_global_variables(self):
-        return self.sess.run([self.www, self.ttt, self.aaa, self.global_step_inc, self.global_step_var])

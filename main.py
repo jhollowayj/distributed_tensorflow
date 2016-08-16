@@ -90,7 +90,7 @@ class Runner:
                     with tf.name_scope('global_vars'):
                         global_step_var = tf.Variable(0)
                         global_step_inc = global_step_var.assign_add(tf.constant(1))
-            self.dqn.build_worker_specific_variables() # Kinda hoping this works... :)
+            self.dqn.build_worker_specific_model(FLAGS.task_index)
             
             # Run all the initializers to prepare the trainable parameters.
             with tf.device(tf.train.replica_device_setter(

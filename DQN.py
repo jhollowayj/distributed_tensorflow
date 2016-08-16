@@ -96,16 +96,22 @@ class DQN:
         self.rmsprop_min = self.rmsprop_mins[self.params['wid']][self.params['tid']][self.params['aid']]
         self.cost = self.costs[self.params['wid']][self.params['tid']][self.params['aid']]
         self.y = self.ys[self.params['wid']][self.params['tid']][self.params['aid']]
-
-    def set_session(self, session, global_step_inc):
+        with tf.device("/cpu:0"): # Adding local variables to get session as a test
+            self.www = tf.Variable(self.params['wid'])
+            self.ttt = tf.Variable(self.params['tid'])
+            self.aaa = tf.Variable(self.params['aid'])
+            
+    def set_session(self, session, global_step_inc, global_step_var):
         self.sess = session
         self.global_step_inc = global_step_inc 
+        self.global_step_var = global_step_var 
     
     def train(self, states, actions, rewards, terminals, next_states, allow_update=True):
         q_target_max = np.amax(self.q(next_states), axis=1) # Pick the next state's best value to use in the reward (curRew + discount*(nextRew))
 
         feed_dict={self.x: self.scale_state_input(states), self.q_t: q_target_max, self.actions: actions, self.rewards: rewards, self.terminals:terminals}
-        step, _, costs = self.sess.run([self.global_step_inc, self.rmsprop_min, self.cost], feed_dict=feed_dict)
+        _, step, _, costs = self.sess.run([self.global_step_inc, self.global_step_var,
+                                           self.rmsprop_min, self.cost], feed_dict=feed_dict)
 
         return costs, step
         
@@ -117,8 +123,6 @@ class DQN:
             return state_to_scale
         else:
             return np.array(state_to_scale) / self.params['input_scaling_vector']
-    
-    def save_weights(self, name, boolean_for_something):
-        # SAVE WEIGHTS?!?  CLIENTS DON'T GET TO SAVE WEIGHTS.  THOSE COME FROM THE SERVER!
-        pass
         
+    def test_local_and_global_variables(self):
+        return self.sess.run([self.www, self.ttt, self.aaa, self.global_step_inc, self.global_step_var])

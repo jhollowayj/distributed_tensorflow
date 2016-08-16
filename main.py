@@ -115,7 +115,7 @@ class Runner:
             start_time = time.time()
             print "=============== about to generate a sess (prepare_or_wait_for_session) "
             with sv.prepare_or_wait_for_session(server.target) as sess:
-                self.dqn.set_session(sess, global_step_inc) # Give him a session.
+                self.dqn.set_session(sess, global_step_inc, global_step_var) # Give him a session.
                 
                 print("\nSTARTING UP THE TRAINING STEPS =-=-=-=-=-=-=-=-=-=-=-=\n")
                 sys.stdout.flush()
@@ -129,7 +129,8 @@ class Runner:
                 sys.stdout.flush()
                 while not sv.should_stop() and step_cnt < self.FLAGS.num_steps:
                     # print "Global Step: {} || Local Step: {}".format(gstep, step_cnt)
-                    print self.agent.model.test_local_tf_vars(), step_cnt # TODO remove this test
+                    print self.agent.model.test_local_and_global_variables()
+                    
 
                     sys.stdout.flush()
                     self.world.reset()

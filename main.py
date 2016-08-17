@@ -84,86 +84,80 @@ class Runner:
         if self.FLAGS.job_name == "ps":
             server.join()
         elif self.FLAGS.job_name == "worker":
-            with tf.device(tf.train.replica_device_setter(cluster=cluster)): # not sure what this does either TODO
-                self.dqn.build_network_variables() # Assign the variables to parameter servers, build all of the graphs 
-                with tf.device("/job:ps/task:0"):
-                    with tf.name_scope('global_vars'):
-                        global_step_var = tf.Variable(0)
-                        global_step_inc = global_step_var.assign_add(tf.constant(1))
-            local_vars = self.dqn.build_worker_specific_model(FLAGS.task_index)
+            # Build local graph/session
+            with tf.Graph().as_default() as local_graph:
+                self.dqn.build_worker_specific_model(FLAGS.task_index, local_graph)
+                local_graph.finalize() # Just the local graph plz!
 
-            # Run all the initializers to prepare the trainable parameters.
-            with tf.device(tf.train.replica_device_setter(
-                               worker_device="/job:worker/task:%d" % FLAGS.task_index, # What does this line do? TODO
-                               cluster=cluster)):
-                # print "=============== createing saver, summary, init ops"
-                # saver = tf.train.Saver()                # dist
-                # summary_op = tf.merge_all_summaries()   # dist
-                # init_op = tf.initialize_all_variables() # dist
-                init_op = tf.initialize_variables(tf.all_variables() + tf.local_variables()) # try to get everything?
-            ###################################################################################
-            # Create a "supervisor", which oversees the training process.
-            print "=============== building supervisor "
-            sv = tf.train.Supervisor(is_chief=(self.FLAGS.task_index == 0),
-                                    logdir="/mnt/pccfs/projects/distTF/modularDNN_Practice/logs/",
-                                    init_op=init_op,
-                                    # summary_op=summary_op,
-                                    # saver=saver,
-                                    global_step=global_step_var,
-                                    save_model_secs=600)
-            ###################################################################################
+            # Then build the global stuff.
+            tf.reset_default_graph()
+            with tf.Graph().as_default() as global_graph:
+                with tf.device(tf.train.replica_device_setter(worker_device="/job:worker/task:%d" % FLAGS.task_index, cluster=cluster)):
+                    # Assign the variables to parameter servers, build all of the graphs
+                    global_vars = self.dqn.build_global_variables()  
+                    with tf.device("/job:ps/task:0") and tf.name_scope('global_vars'):
+                            global_step_var = tf.Variable(0)
+                            global_step_inc = global_step_var.assign_add(tf.constant(1))    
+                ###################################################################################
+                # Create a "supervisor", which oversees the training process.
+                print "=============== building supervisor "
+                sv = tf.train.Supervisor(is_chief=(self.FLAGS.task_index == 0),
+                                        logdir="/mnt/pccfs/projects/distTF/modularDNN_Practice/logs/",
+                                        init_op=tf.initialize_all_variables(),
+                                        # summary_op=summary_op,
+                                        # saver=saver,
+                                        global_step=global_step_var)
+                ###################################################################################
 
-            start_time = time.time()
-            print "=============== about to generate a sess (prepare_or_wait_for_session) "
-            with sv.prepare_or_wait_for_session(server.target) as sess:
-                tf.initialize_local_variables().eval(sess)
-            
-                self.dqn.set_session(sess, global_step_inc, global_step_var) # Give him a session.
+                start_time = time.time()
+                print "=============== about to generate a sess (prepare_or_wait_for_session) "
+                with sv.prepare_or_wait_for_session(server.target) as sess:
                 
-                print("\nSTARTING UP THE TRAINING STEPS =-=-=-=-=-=-=-=-=-=-=-=\n")
-                sys.stdout.flush()
-      
-                step_cnt, update_cnt, eval_episode = 1, 1, 0
-                max_q, min_q, sum_q, winning_cnt, running_score = self.reset_variables()
-                gstep = 0
-                self.agent.reset_exp_db()
-                # Time to play the game vvv
-                print "About to start..."
-                sys.stdout.flush()
-                while not sv.should_stop() and step_cnt < self.FLAGS.num_steps:
-                    # print "Global Step: {} || Local Step: {}".format(gstep, step_cnt)
-                    print self.agent.model.test_local_and_global_variables()
-
+                    self.dqn.set_global_session(sess, global_step_inc, global_step_var) # Give him a session.
+                    
+                    print("\nSTARTING UP THE TRAINING STEPS =-=-=-=-=-=-=-=-=-=-=-=\n")
                     sys.stdout.flush()
-                    self.world.reset()
-                    if self.is_eval_episode(update_cnt+eval_episode):
-                        eval_episode += 1
-                        self.agent.set_evaluate_flag(True)
-                        tmp_exp = self.agent.get_exp_db() # Save state
-                        max_q, min_q, sum_q, winning_cnt, running_score = self.reset_variables()
-                        while self.world.is_running() and self.world.get_time() < self.FLAGS.max_steps_per_episode:
-                            reward, max_q, min_q = self.run_world_one_step(max_q, min_q)
-                            running_score += reward
-                        # Test your network & Report
-                        cost, gstep = self.agent.train(False)
-                        self.agent.set_exp_db(tmp_exp)  # Restore state
-                    else:
-                        self.agent.set_evaluate_flag(False)
-                        while self.world.is_running() and self.world.get_time() < self.FLAGS.max_steps_per_episode:
-                            reward, max_q, min_q = self.run_world_one_step(max_q, min_q)
-                            running_score += reward
-                            step_cnt += 1
-                            if step_cnt % self.FLAGS.steps_til_train == 0:
-                                update_cnt += 1
-                                cost, gstep = self.agent.train()
-                                max_q, min_q, sum_q, winning_cnt, running_score = self.reset_variables()
-                                self.print_to_console(False, update_cnt, running_score, max_q, cost, winning_cnt)
-                                
-                    if self.world.get_time() != self.FLAGS.max_steps_per_episode:
-                        winning_cnt += 1
         
-                # Once done, ask for all the services to stop.
-            sv.stop()
+                    step_cnt, update_cnt, eval_episode = 1, 1, 0
+                    max_q, min_q, sum_q, winning_cnt, running_score = self.reset_variables()
+                    gstep = 0
+                    self.agent.reset_exp_db()
+                    # Time to play the game vvv
+                    print "About to start..."
+                    sys.stdout.flush()
+                    while not sv.should_stop() and step_cnt < self.FLAGS.num_steps:
+                        # print "Global Step: {} || Local Step: {}".format(gstep, step_cnt)
+                        # sys.stdout.flush()
+                        
+                        self.world.reset()
+                        if self.is_eval_episode(update_cnt+eval_episode):
+                            eval_episode += 1
+                            self.agent.set_evaluate_flag(True)
+                            tmp_exp = self.agent.get_exp_db() # Save state
+                            max_q, min_q, sum_q, winning_cnt, running_score = self.reset_variables()
+                            while self.world.is_running() and self.world.get_time() < self.FLAGS.max_steps_per_episode:
+                                reward, max_q, min_q = self.run_world_one_step(max_q, min_q)
+                                running_score += reward
+                            # Test your network & Report
+                            cost, gstep = self.agent.train(False)
+                            self.agent.set_exp_db(tmp_exp)  # Restore state
+                        else:
+                            self.agent.set_evaluate_flag(False)
+                            while self.world.is_running() and self.world.get_time() < self.FLAGS.max_steps_per_episode:
+                                reward, max_q, min_q = self.run_world_one_step(max_q, min_q)
+                                running_score += reward
+                                step_cnt += 1
+                                if step_cnt % self.FLAGS.steps_til_train == 0:
+                                    update_cnt += 1
+                                    cost, gstep = self.agent.train()
+                                    max_q, min_q, sum_q, winning_cnt, running_score = self.reset_variables()
+                                    self.print_to_console(False, update_cnt, running_score, max_q, cost, winning_cnt)
+                                    
+                        if self.world.get_time() != self.FLAGS.max_steps_per_episode:
+                            winning_cnt += 1
+            
+                    # Once done, ask for all the services to stop.
+                sv.stop()
 
     def build_classes(self):
         self.world = JacobsMazeWorld.JacobsMazeWorld(

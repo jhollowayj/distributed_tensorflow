@@ -90,24 +90,25 @@ class Runner:
                     with tf.name_scope('global_vars'):
                         global_step_var = tf.Variable(0)
                         global_step_inc = global_step_var.assign_add(tf.constant(1))
-            self.dqn.build_worker_specific_model(FLAGS.task_index)
-            
+            local_vars = self.dqn.build_worker_specific_model(FLAGS.task_index)
+
             # Run all the initializers to prepare the trainable parameters.
             with tf.device(tf.train.replica_device_setter(
                                worker_device="/job:worker/task:%d" % FLAGS.task_index, # What does this line do? TODO
                                cluster=cluster)):
                 # print "=============== createing saver, summary, init ops"
-                saver = tf.train.Saver()                # dist
-                summary_op = tf.merge_all_summaries()   # dist
-                init_op = tf.initialize_all_variables() # dist
+                # saver = tf.train.Saver()                # dist
+                # summary_op = tf.merge_all_summaries()   # dist
+                # init_op = tf.initialize_all_variables() # dist
+                init_op = tf.initialize_variables(tf.all_variables() + tf.local_variables()) # try to get everything?
             ###################################################################################
             # Create a "supervisor", which oversees the training process.
             print "=============== building supervisor "
             sv = tf.train.Supervisor(is_chief=(self.FLAGS.task_index == 0),
                                     logdir="/mnt/pccfs/projects/distTF/modularDNN_Practice/logs/",
                                     init_op=init_op,
-                                    summary_op=summary_op,
-                                    saver=saver,
+                                    # summary_op=summary_op,
+                                    # saver=saver,
                                     global_step=global_step_var,
                                     save_model_secs=600)
             ###################################################################################
@@ -115,6 +116,8 @@ class Runner:
             start_time = time.time()
             print "=============== about to generate a sess (prepare_or_wait_for_session) "
             with sv.prepare_or_wait_for_session(server.target) as sess:
+                tf.initialize_local_variables().eval(sess)
+            
                 self.dqn.set_session(sess, global_step_inc, global_step_var) # Give him a session.
                 
                 print("\nSTARTING UP THE TRAINING STEPS =-=-=-=-=-=-=-=-=-=-=-=\n")
@@ -130,7 +133,6 @@ class Runner:
                 while not sv.should_stop() and step_cnt < self.FLAGS.num_steps:
                     # print "Global Step: {} || Local Step: {}".format(gstep, step_cnt)
                     print self.agent.model.test_local_and_global_variables()
-                    
 
                     sys.stdout.flush()
                     self.world.reset()

@@ -62,20 +62,20 @@ echo $COMMAND
 ##### PARAMETER SERVERS #####
 # PS_HOSTNAMES=( reaper potts infinity  ghost santaka morita )
 # PS_HOSTPORTS=( 2222   2222  2222      2222  2222    2222   )
-PS_HOSTNAMES=( santaka morita naga )
-PS_HOSTPORTS=( 2222    2222   2222 )
+PS_HOSTNAMES=( infinity infinity infinity )
+PS_HOSTPORTS=( 2222    2223   2224 )
 
 ##### WORKERS: LEARNING #####
-WK_HOSTNAMES_TRAIN=( reaper potts infinity  hatch )
-WK_HOSTPORTS_TRAIN=( 2223   2223  2223      2223  )
+WK_HOSTNAMES_TRAIN=( infinity infinity infinity  infinity )
+WK_HOSTPORTS_TRAIN=( 2225   2226  2227      2228  )
 WK_WAT_IDS_TRAIN=("--world_id=1 --task_id=1 --agent_id=1" 
                   "--world_id=1 --task_id=1 --agent_id=2" 
                   "--world_id=1 --task_id=2 --agent_id=1" 
                   "--world_id=1 --task_id=2 --agent_id=3" )
 
 ##### WORKERS: EVALUATORS #####
-WK_HOSTNAMES_EVAL=( santaka morita )
-WK_HOSTPORTS_EVAL=( 2223    2223   )
+WK_HOSTNAMES_EVAL=( infinity infinity )
+WK_HOSTPORTS_EVAL=( 2229    2230   )
 WK_WAT_IDS_EVAL=("--world_id=1 --task_id=1 --agent_id=3 --observer=True"
                  "--world_id=1 --task_id=2 --agent_id=2 --observer=True" )
 #####################################################################################
@@ -231,6 +231,7 @@ elif [ "$COMMAND" = 'run' ]; then
     worker_tabs_cmd+=(--tab -e "$cmd")
   done
   gnome-terminal "${server_tabs_cmd[@]}"
+  sleep 1s
   gnome-terminal "${worker_tabs_cmd[@]}"
 fi
 

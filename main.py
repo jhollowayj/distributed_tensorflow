@@ -94,7 +94,7 @@ class Runner:
             with tf.Graph().as_default() as global_graph:
                 with tf.device(tf.train.replica_device_setter(worker_device="/job:worker/task:%d" % FLAGS.task_index, cluster=cluster)):
                     # Assign the variables to parameter servers, build all of the graphs
-                    global_vars = self.dqn.build_global_variables()  
+                    self.dqn.build_global_variables()  
                     with tf.device("/job:ps/task:0") and tf.name_scope('global_vars'):
                             global_step_var = tf.Variable(0)
                             global_step_inc = global_step_var.assign_add(tf.constant(1))    
@@ -114,7 +114,7 @@ class Runner:
                 with sv.prepare_or_wait_for_session(server.target) as sess:
                 
                     self.dqn.set_global_session(sess, global_step_inc, global_step_var) # Give him a session.
-                    
+                    self.dqn.update_weights()
                     print("\nSTARTING UP THE TRAINING STEPS =-=-=-=-=-=-=-=-=-=-=-=\n")
                     sys.stdout.flush()
         
@@ -155,6 +155,7 @@ class Runner:
                                     
                         if self.world.get_time() != self.FLAGS.max_steps_per_episode:
                             winning_cnt += 1
+                        sys.stdout.flush()
             
                     # Once done, ask for all the services to stop.
                 sv.stop()

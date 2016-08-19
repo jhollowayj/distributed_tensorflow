@@ -41,7 +41,7 @@ tf.app.flags.DEFINE_integer('batch_size', 250, "How big of a batch to pull for t
 # NEURAL-NET       #Discount Factor, Learning Rate, etc. TODO
 tf.app.flags.DEFINE_boolean('scale_input', False, "Scales the input to be between 0-1")
 tf.app.flags.DEFINE_float  ('discount_rate', 0.90, "Discount rate used in learner")
-tf.app.flags.DEFINE_float  ('learning_rate', 0.0001, "Learniing rate used in learner")
+tf.app.flags.DEFINE_float  ('learning_rate', 0.00003, "Learning rate used in learner")
 tf.app.flags.DEFINE_float  ('momentum', 0.0, "Momentum used in learner") # 0 works well.
 tf.app.flags.DEFINE_float  ('requested_gpu_vram_percent', 0.02, "How much gpu vram to use (DistTF doesn't support it yet for some reason with 'sv.prepare_or_wait_for_session')")
 tf.app.flags.DEFINE_integer('device_to_use', 1, "Which gpu device to use.  Probably 0 if using 'cuda_visible_devices=#' before the python command")
@@ -49,6 +49,7 @@ tf.app.flags.DEFINE_integer('device_to_use', 1, "Which gpu device to use.  Proba
 tf.app.flags.DEFINE_integer('max_steps_per_episode', 150, "Number of steps the game can try before it's declared 'game over'")
 tf.app.flags.DEFINE_integer('verbose', 0, "Level of prints to use (0=none, 1, 2, 3)")
 tf.app.flags.DEFINE_boolean('report_to_sql', False, "Send numbers to sql.  Defaults to false.")
+tf.app.flags.DEFINE_boolean('vis', True, "Display visualization with cv2.  Defaults to false.")
 # CLIENT-SERVER
 tf.app.flags.DEFINE_integer('num_parallel_learners', -1, "Mostly just used for sql logging.")
 FLAGS = tf.app.flags.FLAGS
@@ -64,6 +65,7 @@ if FLAGS.observer:
 class Runner:
     def __init__(self, FLAGS):
       self.FLAGS = FLAGS
+      self.actions = None
       
     def main(self):
         ps_hosts = self.FLAGS.ps_hosts.split(",")
@@ -78,12 +80,13 @@ class Runner:
                                 job_name=self.FLAGS.job_name,
                                 task_index=self.FLAGS.task_index)
                                 # config=tf.ConfigProto(gpu_options=gpu_options)) Will be available in the next release
-        self.build_classes()
 
           ##########################################################################################
         if self.FLAGS.job_name == "ps":
             server.join()
         elif self.FLAGS.job_name == "worker":
+            self.build_classes()
+    
             # Build local graph/session
             with tf.Graph().as_default() as local_graph:
                 self.dqn.build_worker_specific_model(FLAGS.task_index, local_graph)
@@ -94,7 +97,7 @@ class Runner:
             with tf.Graph().as_default() as global_graph:
                 with tf.device(tf.train.replica_device_setter(worker_device="/job:worker/task:%d" % FLAGS.task_index, cluster=cluster)):
                     # Assign the variables to parameter servers, build all of the graphs
-                    self.dqn.build_global_variables()  
+                    self.dqn.build_global_variables(nparamservers=len(ps_hosts))  
                     with tf.device("/job:ps/task:0") and tf.name_scope('global_vars'):
                             global_step_var = tf.Variable(0)
                             global_step_inc = global_step_var.assign_add(tf.constant(1))    
@@ -119,7 +122,7 @@ class Runner:
                     sys.stdout.flush()
         
                     step_cnt, update_cnt, eval_episode = 1, 1, 0
-                    max_q, min_q, sum_q, winning_cnt, running_score = self.reset_variables()
+                    max_q, min_q, sum_q, winning_cnt, running_score, self.actions = self.reset_variables()
                     gstep = 0
                     self.agent.reset_exp_db()
                     # Time to play the game vvv
@@ -134,7 +137,7 @@ class Runner:
                             eval_episode += 1
                             self.agent.set_evaluate_flag(True)
                             tmp_exp = self.agent.get_exp_db() # Save state
-                            max_q, min_q, sum_q, winning_cnt, running_score = self.reset_variables()
+                            max_q, min_q, sum_q, winning_cnt, running_score, self.actions = self.reset_variables()
                             while self.world.is_running() and self.world.get_time() < self.FLAGS.max_steps_per_episode:
                                 reward, max_q, min_q = self.run_world_one_step(max_q, min_q)
                                 running_score += reward
@@ -150,8 +153,8 @@ class Runner:
                                 if step_cnt % self.FLAGS.steps_til_train == 0:
                                     update_cnt += 1
                                     cost, gstep = self.agent.train()
-                                    max_q, min_q, sum_q, winning_cnt, running_score = self.reset_variables()
                                     self.print_to_console(False, update_cnt, running_score, max_q, cost, winning_cnt)
+                                    max_q, min_q, sum_q, winning_cnt, running_score, self.actions = self.reset_variables()
                                     
                         if self.world.get_time() != self.FLAGS.max_steps_per_episode:
                             winning_cnt += 1
@@ -191,6 +194,9 @@ class Runner:
         action, values = self.agent.select_action(np.array(cur_state))
         next_state, reward, terminal = self.world.act(action)
         self.agent.stash_new_exp(cur_state, action, reward, terminal, next_state)
+        self.actions[action] += 1
+        if self.FLAGS.vis:
+            self.world.render()
         return reward, max(max_q, np.max(values)),  min(min_q, np.min(values))
         
     def is_eval_episode(self, e):
@@ -206,11 +212,12 @@ class Runner:
         print "%s = stp:%6d:: Re:%5.1f, Max_Q:%7.3f, c:%9.4f, E:%4.3f, W?:%s %s" % \
         ("{}.{}.{}".format(self.FLAGS.world_id, self.FLAGS.task_id, self.FLAGS.agent_id),
         update_cnt, avgScore, max_q, cost, self.agent.calculate_epsilon(),
-        str(winning), "EVAL" if is_eval else "")
+        str(winning), "EVAL" if is_eval else ""), self.actions
         
     def reset_variables(self):
         self.agent.reset_exp_db() # go ahead and reset now.  Note:exp will span multiple games now.
-        return -np.Infinity, np.Infinity, 0.0, 0, 0.0 # max_q, min_q, sum_q, winning_cnt, running_score
+              # max_q,       min_q,       sum_q, winning_cnt, running_score   Actions
+        return -np.Infinity, np.Infinity, 0.0,       0,       0.0,            [0]*len(self.world.get_action_space())
        
 
 if __name__ == '__main__':

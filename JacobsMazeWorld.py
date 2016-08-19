@@ -3,7 +3,8 @@ import numpy as np
 from enum import Enum
 import numpy as np
 from enum import Enum
-
+import cv2
+import time
 
 class direction(Enum):
     n = 0
@@ -44,8 +45,12 @@ class JacobsMazeWorld(World):
             maze_object.open:  0.0,
             maze_object.user:  0.0,
         }
+        self.render_to_console = False
+        self.render_to_cv2 = True
+        self.window_name = None
         self.endLocation = self.getGoalPoint(self.task_id)
         self.restart()
+        
         
     def restart(self):
         self.maze = self.buildMaze()
@@ -67,13 +72,13 @@ class JacobsMazeWorld(World):
         
     def getStartPoint(self, taskId):
         return {
-            1: ( 5,  5),
+            1: ( 1,  1),
             2: ( 1, 10),
             3: (10,  1)
         }[taskId]
     def getGoalPoint(self, taskId):
         return {
-            1: ( 1, 1),
+            1: ( 5, 5),
             2: ( 8, 8),
             3: ( 3, 3)
         }[taskId]
@@ -183,18 +188,34 @@ class JacobsMazeWorld(World):
         return arr
 
     def render(self):
-        mazecopy = []
-        for x in np.array(self.maze):
-            t = []
-            for y in x:
-                if y.value == 1:
-                    t.append(' ')
-                else: 
-                    t.append(str(y.value))
-            mazecopy.append(t) 
-        # mazecopy[self.agent_location[0], self.agent_location[1]] = -1
-        print np.array(mazecopy)
-        # print "                              Score:{}  (+ {})".format(m.get_score(), score)
+        if self.render_to_console:
+            mazecopy = []
+            for x in np.array(self.maze):
+                t = []
+                for y in x:
+                    if y.value == 1:
+                        t.append(' ')
+                    else: 
+                        t.append(str(y.value))
+                mazecopy.append(t) 
+            mazecopy[self.agent_location[0], self.agent_location[1]] = -1
+            print np.array(mazecopy)
+            print "                              Score:{}  (+ {})".format(m.get_score(), score)
+        if self.render_to_cv2:
+            if self.window_name is None:
+                self.window_name = "maze.{}.{}.{}".format(self.world_id, self.task_id, self.agent_id) 
+                cv2.startWindowThread()
+                cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+            cp = np.empty([12, 12, 3], dtype=float)
+            for i in range(12):
+                for j in range(12):
+                    cp[i,j] = [self.maze[i,j].value] * 3
+            cp += np.min(cp) # Scale to 0. -> 1.
+            cp = cp / np.max(cp)
+            cp[self.agent_location[0], self.agent_location[1]] = [maze_object.user.value] * 3
+
+            cv2.imshow(self.window_name, cp)
+            time.sleep(0.01)
 
     #######################################################################
 

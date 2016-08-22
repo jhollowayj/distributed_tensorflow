@@ -28,6 +28,7 @@ class DQN:
             'learning_rate_end':    0.003, #0.000001,
             'learning_rate_decay':  3000,
         }
+        self.prioritaztion_training = False
 
     def build_global_variables(self, nparamservers):
         # CREATE Storage Variables on the various Parameter Servers
@@ -148,7 +149,7 @@ class DQN:
                         discount = tf.constant(self.params['discount'], name="discount") # only need one constant.  :)
                         self.yj = tf.add(self.rewards, tf.mul(1.0-self.terminals, tf.mul(discount, self.q_t)), name="true_y")
                         self.Q_pred = tf.reduce_sum(tf.mul(self.y, self.actions), reduction_indices=1, name="q_pred")
-                        self.cost = tf.reduce_sum(tf.pow(tf.sub(self.yj, self.Q_pred), 2), name="cost")
+                        self.cost = tf.reduce_sum(tf.pow(tf.sub(self.yj, self.Q_pred), 2), name="cost") # Maybe reduce_mean?
                         with tf.device("/cpu:0"):
                             self.rmsprop_min = tf.train.RMSPropOptimizer(
                                 learning_rate=self.params['lr'],
@@ -181,42 +182,25 @@ class DQN:
         self.global_step_var = global_step_var
 
     def train(self, states, actions, rewards, terminals, next_states, allow_update=True, loop_cnt=0):
-        test = False # DEBUG
         q_target_max = np.amax(self.q(next_states), axis=1) # Pick the next state's best value to use in the reward (curRew + discount*(nextRew))
         
         feed_dict={self.x: self.scale_state_input(states), self.q_t: q_target_max, self.actions: actions, self.rewards: rewards, self.terminals:terminals}
-        if test:
-            start_local = self.sess_local.run(self.local_weights) # DEBUG: Get start
-        
         result_local = self.sess_local.run([self.cost] + self.assign_deltas + [self.rmsprop_min], feed_dict=feed_dict)
-        _, gstep = self.sess_global.run([self.global_step_inc, self.global_step_var])
+        _, gstep = self.sess_global.run([self.global_step_inc, self.global_step_var]) # update train count
         
-        if test:
-            end_local = self.sess_local.run(self.local_weights) # DEBUG: Get end
-            end_delta = self.sess_local.run(self.delta_vars) # DEBUG: Get delta
-            
-            globals = self.sess_global.run(self.global_vars) # DEBUG: get start G
+        if allow_update: # if eval, don't send, etc...
             self.send_gradients()
-            globals_with_delta = self.sess_global.run(self.global_vars) # DEBUG: get end G
-            self.update_weights()
-            local_post_update = self.sess_local.run(self.local_weights) # DEBUG: 
-                
-            
-            for ls, gs, le, ge, d, re in zip(start_local, globals, end_local, globals_with_delta, end_delta, local_post_update):
-                
-                assert np.all(ls == gs)
-                print np.sum((ls+d) - le) # should be 0?
-                assert np.all((ls+d) == le)
-                assert np.all((gs+d) == ge)
-                assert np.all(le == ge)
-                assert np.all(re == ge)
-            # if allow_update: # if eval, don't send, etc...
+        self.update_weights()
         
         costs = result_local[0]
-        if costs > 70 and loop_cnt < 50:
-            print "Re-training erroneous dataset: c:{:<15f} at loop:{}".format(costs, loop_cnt+1) 
-            sys.stdout.flush()
-            return self.train(states, actions, rewards, terminals, next_states, allow_update, loop_cnt+1)
+        if self.prioritaztion_training:
+            # Poor man's 'prioritization replay', but should work since we throw away the exp.db and cant replay it...
+            if costs > 70 and loop_cnt < 50:
+                print "Re-training erroneous dataset: c:{:<15f} at loop:{}".format(costs, loop_cnt+1) 
+                sys.stdout.flush()
+                return self.train(states, actions, rewards, terminals, next_states, allow_update, loop_cnt+1)
+            else:
+                return costs, gstep
         else:
             return costs, gstep
 

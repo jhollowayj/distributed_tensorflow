@@ -5,14 +5,19 @@ help='echo -e \n\tUsage: ./run.sh\n\t\t\t[-k|--kill]  - kill the current list of
 COMMAND='run'
 # echo "$@"
 # Parse command line parameters
+COMP_SET='small'
+dashX=''
 for i in "$@"
 do
   case $i in
-    -d|--debug) COMMAND='debug'; shift ;;
-    -a|--all) COMMAND='all'; shift ;;
-    -k|--kill) COMMAND='kill'; shift ;;
-    -c|--clean) COMMAND='clean'; shift ;;
-    -r|--run) COMMAND='run'; shift ;; # Default
+    -d|--debug) COMMAND='debug';  shift ;;
+    -a|--all)   COMMAND='all';    shift ;;
+    -k|--kill)  COMMAND='kill';   shift ;;
+    -c|--clean) COMMAND='clean';  shift ;;
+    -r|--run)   COMMAND='run';    shift ;; # Default
+    -f)         COMP_SET='full';  shift ;;
+    -s)         COMP_SET='small'; shift ;;
+    -x)         dashX="-X";       shift ;; #use ssh -X flag
     --help) $help; exit ;;
   esac
 done
@@ -23,61 +28,66 @@ echo $COMMAND
 ###          EDDIT THIS PART;  IT WILL FILL OUT THE FORMS FOR YOU                 ###
 ###    (SADLY, I'M NOT SURE IF YOU CAN DO MORE THAN ONE CUDA DEVICE AT A TIME.)   ###
 #####################################################################################
-# PS_HOSTNAMES=( morita hatch naga ghost infinity reaper potts santaka )
-# PS_HOSTPORTS=( 2222   2222  2222 2222  2222     2222   2222  2222 )
-# WK_HOSTNAMES_TRAIN=( morita infinity reaper ghost santaka potts naga hatch  morita infinity reaper ghost santaka potts naga hatch  morita infinity )
-# WK_HOSTPORTS_TRAIN=( 2223   2223     2223   2223  2223    2223  2223 2223   2224   2224     2224   2224  2224    2224  2224 2224   2225   2225     )
-# WK_WAT_IDS_TRAIN=("--world_id=1 --task_id=1 --agent_id=1" 
-#                   "--world_id=1 --task_id=1 --agent_id=2"
-#                   "--world_id=1 --task_id=2 --agent_id=1"
-#                   "--world_id=1 --task_id=2 --agent_id=3"
-#                   "--world_id=1 --task_id=3 --agent_id=2"
-#                   "--world_id=1 --task_id=3 --agent_id=3"
-#                   "--world_id=2 --task_id=1 --agent_id=1"
-#                   "--world_id=2 --task_id=1 --agent_id=3"
-#                   "--world_id=2 --task_id=2 --agent_id=2"
-#                   "--world_id=2 --task_id=2 --agent_id=3"
-#                   "--world_id=2 --task_id=3 --agent_id=1"
-#                   "--world_id=2 --task_id=3 --agent_id=2"
-#                   "--world_id=3 --task_id=1 --agent_id=2"
-#                   "--world_id=3 --task_id=1 --agent_id=3"
-#                   "--world_id=3 --task_id=2 --agent_id=1"
-#                   "--world_id=3 --task_id=2 --agent_id=2"
-#                   "--world_id=3 --task_id=3 --agent_id=1"
-#                   "--world_id=3 --task_id=3 --agent_id=3" )
+if [ "$COMP_SET" = 'full' ]; then
+    PS_HOSTNAMES=( morita hatch naga ghost infinity santaka )
+    PS_HOSTPORTS=( 2222   2222  2222 2222  2222     2222 )
+    WK_HOSTNAMES_TRAIN=( morita morita morita hatch hatch hatch naga naga naga ghost ghost ghost infinity infinity infinity santaka santaka santaka )
+    WK_HOSTPORTS_TRAIN=( 2223   2224   2225   2223  2224  2225  2223 2224 2225 2223  2224  2225  2223     2224     2225     2223    2224    2225 )
+    WK_WAT_IDS_TRAIN=("--world_id=1 --task_id=1 --agent_id=1" 
+                      "--world_id=1 --task_id=1 --agent_id=2"
+                      "--world_id=1 --task_id=2 --agent_id=1"
+                      "--world_id=1 --task_id=2 --agent_id=3"
+                      "--world_id=1 --task_id=3 --agent_id=2"
+                      "--world_id=1 --task_id=3 --agent_id=3"
+                      "--world_id=2 --task_id=1 --agent_id=1"
+                      "--world_id=2 --task_id=1 --agent_id=3"
+                      "--world_id=2 --task_id=2 --agent_id=2"
+                      "--world_id=2 --task_id=2 --agent_id=3"
+                      "--world_id=2 --task_id=3 --agent_id=1"
+                      "--world_id=2 --task_id=3 --agent_id=2"
+                      "--world_id=3 --task_id=1 --agent_id=2"
+                      "--world_id=3 --task_id=1 --agent_id=3"
+                      "--world_id=3 --task_id=2 --agent_id=1"
+                      "--world_id=3 --task_id=2 --agent_id=2"
+                      "--world_id=3 --task_id=3 --agent_id=1"
+                      "--world_id=3 --task_id=3 --agent_id=3" )
 
-# WK_HOSTNAMES_EVAL=( morita reaper ghost santaka potts naga hatch  infinity reaper)
-# WK_HOSTPORTS_EVAL=( 2230   2230   2230  2230    2230  2230 2230   2230     2231)
-# WK_WAT_IDS_EVAL=("--world_id=1 --task_id=1 --agent_id=3 --observer=True" 
-#                  "--world_id=1 --task_id=2 --agent_id=2 --observer=True"
-#                  "--world_id=1 --task_id=3 --agent_id=1 --observer=True"
-#                  "--world_id=2 --task_id=1 --agent_id=2 --observer=True"
-#                  "--world_id=2 --task_id=2 --agent_id=1 --observer=True"
-#                  "--world_id=2 --task_id=3 --agent_id=3 --observer=True"
-#                  "--world_id=3 --task_id=1 --agent_id=1 --observer=True"
-#                  "--world_id=3 --task_id=2 --agent_id=3 --observer=True"
-#                  "--world_id=3 --task_id=3 --agent_id=1 --observer=True" )
-#####################################################################################
+    WK_HOSTNAMES_EVAL=( morita hatch naga ghost infinity santaka morita hatch naga )
+    WK_HOSTPORTS_EVAL=( 2230   2230  2230 2230  2230     2230    2231   2231  2231 )
+    WK_WAT_IDS_EVAL=("--world_id=1 --task_id=1 --agent_id=3 --observer=True" 
+                    "--world_id=1 --task_id=2 --agent_id=2 --observer=True"
+                    "--world_id=1 --task_id=3 --agent_id=1 --observer=True"
+                    "--world_id=2 --task_id=1 --agent_id=2 --observer=True"
+                    "--world_id=2 --task_id=2 --agent_id=1 --observer=True"
+                    "--world_id=2 --task_id=3 --agent_id=3 --observer=True"
+                    "--world_id=3 --task_id=1 --agent_id=1 --observer=True"
+                    "--world_id=3 --task_id=2 --agent_id=3 --observer=True"
+                    "--world_id=3 --task_id=3 --agent_id=1 --observer=True" )
 
-##### PARAMETER SERVERS #####
-# PS_HOSTNAMES=( reaper potts infinity  ghost santaka morita )
-# PS_HOSTPORTS=( 2222   2222  2222      2222  2222    2222   )
-PS_HOSTNAMES=( infinity infinity infinity )
-PS_HOSTPORTS=( 2222    2223   2224 )
+####################################################################################
 
-##### WORKERS: LEARNING #####
-WK_HOSTNAMES_TRAIN=( infinity infinity infinity  infinity )
-WK_HOSTPORTS_TRAIN=( 2225   2226  2227      2228  )
-WK_WAT_IDS_TRAIN=("--world_id=1 --task_id=1 --agent_id=1" 
-                  "--world_id=1 --task_id=1 --agent_id=2" 
-                  "--world_id=1 --task_id=2 --agent_id=1" 
-                  "--world_id=1 --task_id=2 --agent_id=3" )
+elif [ "$COMP_SET" = 'small' ]; then
+  # ##### PARAMETER SERVERS #####
+  # PS_HOSTNAMES=( reaper potts infinity  ghost santaka morita )
+  # PS_HOSTPORTS=( 2222   2222  2222      2222  2222    2222   )
+  PS_HOSTNAMES=( infinity infinity infinity )
+  PS_HOSTPORTS=( 2222    2223   2224 )
 
-##### WORKERS: EVALUATORS #####
-WK_HOSTNAMES_EVAL=( infinity infinity )
-WK_HOSTPORTS_EVAL=( 2229    2230   )
-WK_WAT_IDS_EVAL=("--world_id=1 --task_id=1 --agent_id=3 --observer=True"
-                 "--world_id=1 --task_id=2 --agent_id=2 --observer=True" )
+  ##### WORKERS: LEARNING #####
+  WK_HOSTNAMES_TRAIN=( infinity infinity ) #infinity  infinity )
+  WK_HOSTPORTS_TRAIN=( 2225     2226     ) #2227      2228  )
+  WK_WAT_IDS_TRAIN=("--world_id=1 --task_id=1 --agent_id=1" )
+                    "--world_id=1 --task_id=1 --agent_id=1" 
+                    # "--world_id=1 --task_id=1 --agent_id=1" 
+                    # "--world_id=1 --task_id=1 --agent_id=1" )
+
+  ##### WORKERS: EVALUATORS #####
+  WK_HOSTNAMES_EVAL=( ) # =( infinity infinity )
+  WK_HOSTPORTS_EVAL=( ) # 2229    2230   )
+  WK_WAT_IDS_EVAL=( ) # "--world_id=1 --task_id=1 --agent_id=1 --observer=True"
+                  #  "--world_id=1 --task_id=1 --agent_id=1 --observer=True" )
+                  
+fi
 #####################################################################################
 
 #####################################################################################
@@ -152,12 +162,12 @@ if [ "$COMMAND" = 'debug' ]; then
   echo "=-=-=-=-= CLEAN -==-=-=-=-=-"
   echo "=-=-=-=-=-=-=-==-==-=-=-=-=-"
   for i in "${!SSH_PS[@]}"; do 
-    echo "gnome-terminal -e \"ssh ${SSH_PS[$i]} '$CD; $CVD='' python $COMBINED $JN_PS $TID=$i'\""
+    echo "gnome-terminal -e \"ssh $dashX ${SSH_PS[$i]} '$CD; $CVD='' python $COMBINED $JN_PS $TID=$i'\""
   done
   # LAUNCH WKs   ################################
   for i in "${!SSH_WK[@]}"; do 
     # gnome-terminal -e "ssh ${SSH_WK[$i]} '$CD; $CVD=${WK_CVD_IDS[$i]} python $COMBINED $JN_WK $TID=$i ${WK_WAT[$i]}'" # GPU enabled
-    echo "gnome-terminal -e \"ssh ${SSH_WK[$i]} '$CD; $CVD='' python $COMBINED $JN_WK $TID=$i ${WK_WAT[$i]} ${WK_WorldAgentTaskIDs[$i]}'\"" # CPU ONLY
+    echo "gnome-terminal -e \"ssh $dashX ${SSH_WK[$i]} '$CD; $CVD='' python $COMBINED $JN_WK $TID=$i ${WK_WAT[$i]} ${WK_WorldAgentTaskIDs[$i]}'\"" # CPU ONLY
   done
 
 ###############################################
@@ -218,7 +228,7 @@ elif [ "$COMMAND" = 'run' ]; then
   # LAUNCH PSs   ################################
   server_tabs_cmd=""
   for i in "${!SSH_PS[@]}"; do 
-    cmd="ssh ${SSH_PS[$i]} '$PRINT_HOSTNAME; $CD; $CVD=\"\" python $COMBINED $JN_PS $TID=$i'"
+    cmd="ssh $dashX ${SSH_PS[$i]} '$PRINT_HOSTNAME; $CD; $CVD=\"\" python $COMBINED $JN_PS $TID=$i'"
     server_tabs_cmd+=(--tab -e "$cmd")
   done
   
@@ -227,7 +237,7 @@ elif [ "$COMMAND" = 'run' ]; then
   for i in "${!SSH_WK[@]}"; do 
     # cmd="ssh ${SSH_WK[$i]} '$PRINT_HOSTNAME; $CD; $CVD=\"\" python $COMBINED $JN_WK $TID=$i ${WK_WorldAgentTaskIDs[$i]}'" # CPU only
     # cmd="ssh ${SSH_WK[$i]} '$PRINT_HOSTNAME; $CD; $CVD=${WK_CVD_IDS[$i]} python $COMBINED $JN_WK $TID=$i ${WK_WorldAgentTaskIDs[$i]}'" # GPU enabled
-    cmd="ssh ${SSH_WK[$i]} '$PRINT_HOSTNAME; $CD; $CVD=0 python $COMBINED $JN_WK $TID=$i ${WK_WorldAgentTaskIDs[$i]}'" # GPU enabled
+    cmd="ssh $dashX ${SSH_WK[$i]} '$PRINT_HOSTNAME; $CD; $CVD='' python $COMBINED $JN_WK $TID=$i ${WK_WorldAgentTaskIDs[$i]}'" # GPU enabled
     worker_tabs_cmd+=(--tab -e "$cmd")
   done
   gnome-terminal "${server_tabs_cmd[@]}"

@@ -49,7 +49,7 @@ tf.app.flags.DEFINE_integer('device_to_use', 1, "Which gpu device to use.  Proba
 tf.app.flags.DEFINE_integer('max_steps_per_episode', 150, "Number of steps the game can try before it's declared 'game over'")
 tf.app.flags.DEFINE_integer('verbose', 0, "Level of prints to use (0=none, 1, 2, 3)")
 tf.app.flags.DEFINE_boolean('report_to_sql', False, "Send numbers to sql.  Defaults to false.")
-tf.app.flags.DEFINE_boolean('vis', True, "Display visualization with cv2.  Defaults to false.")
+tf.app.flags.DEFINE_boolean('vis', False, "Display visualization with cv2.  Defaults to false.")
 # CLIENT-SERVER
 tf.app.flags.DEFINE_integer('num_parallel_learners', -1, "Mostly just used for sql logging.")
 FLAGS = tf.app.flags.FLAGS

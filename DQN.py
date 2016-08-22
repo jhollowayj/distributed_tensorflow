@@ -28,9 +28,9 @@ class DQN:
             'learning_rate_end':    0.003, #0.000001,
             'learning_rate_decay':  3000,
         }
-        self.prioritaztion_training = False
+        self.prioritaztion_training = True
 
-    def build_global_variables(self, nparamservers):
+    def build_global_variables(self):
         # CREATE Storage Variables on the various Parameter Servers
         with tf.variable_scope("global"):
             self.w1s, self.b1s, self.w2s, self.b2s, self.w3s, self.b3s = {}, {}, {}, {}, {}, {}
@@ -41,38 +41,30 @@ class DQN:
             w2_shape, b2_shape = [self.params['layer_1_hidden'], self.params['layer_2_hidden']],  [self.params['layer_2_hidden']]
             w3_shape, b3_shape = [self.params['layer_2_hidden'], self.params['num_act']], [self.params['num_act']]
             
-            ps = range(nparamservers)
-            ps_i = 0
             for i in range(1,4): # 1,2,3
-                ps_i = (ps_i + 1) % len(ps)
-                with tf.device("/job:ps/task:{}".format(ps[ps_i])):
-                    with tf.variable_scope("world_{}".format(i)):
-                        self.w1s[i] = tf.get_variable("weight", shape=w1_shape, dtype=tf.float32, initializer=tf.contrib.layers.xavier_initializer())
-                        self.b1s[i] = tf.get_variable("bias",   shape=b1_shape, dtype=tf.float32, initializer=tf.constant_initializer(0.1))
-                        self.ph_w1s[i] = tf.placeholder(tf.float32, shape=w1_shape)
-                        self.ph_b1s[i] = tf.placeholder(tf.float32, shape=b1_shape)
-                        self.azz_w1s[i]= self.w1s[i].assign_add(self.ph_w1s[i])
-                        self.azz_b1s[i]= self.b1s[i].assign_add(self.ph_b1s[i])
-                
-                ps_i = (ps_i + 1) % len(ps)
-                with tf.device("/job:ps/task:{}".format(ps[ps_i])):
-                    with tf.variable_scope("task_{}".format(i)):
-                        self.w2s[i] = tf.get_variable("weight", shape=w2_shape, dtype=tf.float32, initializer=tf.contrib.layers.xavier_initializer())
-                        self.b2s[i] = tf.get_variable("bias",   shape=b2_shape, dtype=tf.float32, initializer=tf.constant_initializer(0.1))
-                        self.ph_w2s[i] = tf.placeholder(tf.float32, shape=w2_shape)
-                        self.ph_b2s[i] = tf.placeholder(tf.float32, shape=b2_shape)
-                        self.azz_w2s[i]= self.w2s[i].assign_add(self.ph_w2s[i])
-                        self.azz_b2s[i]= self.b2s[i].assign_add(self.ph_b2s[i])
-                
-                ps_i = (ps_i + 1) % len(ps)
-                with tf.device("/job:ps/task:{}".format(ps[ps_i])):
-                    with tf.variable_scope("agent_{}".format(i)):
-                        self.w3s[i] = tf.get_variable("weight", shape=w3_shape, dtype=tf.float32, initializer=tf.contrib.layers.xavier_initializer())
-                        self.b3s[i] = tf.get_variable("bias",   shape=b3_shape, dtype=tf.float32, initializer=tf.constant_initializer(0.1))
-                        self.ph_w3s[i] = tf.placeholder(tf.float32, shape=w3_shape)
-                        self.ph_b3s[i] = tf.placeholder(tf.float32, shape=b3_shape)
-                        self.azz_w3s[i]= self.w3s[i].assign_add(self.ph_w3s[i])
-                        self.azz_b3s[i]= self.b3s[i].assign_add(self.ph_b3s[i])
+                with tf.variable_scope("world_{}".format(i)):
+                    self.w1s[i] = tf.get_variable("weight", shape=w1_shape, dtype=tf.float32, initializer=tf.contrib.layers.xavier_initializer())
+                    self.b1s[i] = tf.get_variable("bias",   shape=b1_shape, dtype=tf.float32, initializer=tf.constant_initializer(0.1))
+                    self.ph_w1s[i] = tf.placeholder(tf.float32, shape=w1_shape)
+                    self.ph_b1s[i] = tf.placeholder(tf.float32, shape=b1_shape)
+                    self.azz_w1s[i]= self.w1s[i].assign_add(self.ph_w1s[i])
+                    self.azz_b1s[i]= self.b1s[i].assign_add(self.ph_b1s[i])
+            
+                with tf.variable_scope("task_{}".format(i)):
+                    self.w2s[i] = tf.get_variable("weight", shape=w2_shape, dtype=tf.float32, initializer=tf.contrib.layers.xavier_initializer())
+                    self.b2s[i] = tf.get_variable("bias",   shape=b2_shape, dtype=tf.float32, initializer=tf.constant_initializer(0.1))
+                    self.ph_w2s[i] = tf.placeholder(tf.float32, shape=w2_shape)
+                    self.ph_b2s[i] = tf.placeholder(tf.float32, shape=b2_shape)
+                    self.azz_w2s[i]= self.w2s[i].assign_add(self.ph_w2s[i])
+                    self.azz_b2s[i]= self.b2s[i].assign_add(self.ph_b2s[i])
+            
+                with tf.variable_scope("agent_{}".format(i)):
+                    self.w3s[i] = tf.get_variable("weight", shape=w3_shape, dtype=tf.float32, initializer=tf.contrib.layers.xavier_initializer())
+                    self.b3s[i] = tf.get_variable("bias",   shape=b3_shape, dtype=tf.float32, initializer=tf.constant_initializer(0.1))
+                    self.ph_w3s[i] = tf.placeholder(tf.float32, shape=w3_shape)
+                    self.ph_b3s[i] = tf.placeholder(tf.float32, shape=b3_shape)
+                    self.azz_w3s[i]= self.w3s[i].assign_add(self.ph_w3s[i])
+                    self.azz_b3s[i]= self.b3s[i].assign_add(self.ph_b3s[i])
                 
             self.global_weights = [self.w1s, self.b1s, self.w2s, self.b2s, self.w3s, self.b3s]
 
@@ -149,7 +141,7 @@ class DQN:
                         discount = tf.constant(self.params['discount'], name="discount") # only need one constant.  :)
                         self.yj = tf.add(self.rewards, tf.mul(1.0-self.terminals, tf.mul(discount, self.q_t)), name="true_y")
                         self.Q_pred = tf.reduce_sum(tf.mul(self.y, self.actions), reduction_indices=1, name="q_pred")
-                        self.cost = tf.reduce_sum(tf.pow(tf.sub(self.yj, self.Q_pred), 2), name="cost") # Maybe reduce_mean?
+                        self.cost = tf.reduce_mean(tf.pow(tf.sub(self.yj, self.Q_pred), 2), name="cost")
                         with tf.device("/cpu:0"):
                             self.rmsprop_min = tf.train.RMSPropOptimizer(
                                 learning_rate=self.params['lr'],
@@ -193,9 +185,9 @@ class DQN:
         self.update_weights()
         
         costs = result_local[0]
-        if self.prioritaztion_training:
+        if allow_update and self.prioritaztion_training:
             # Poor man's 'prioritization replay', but should work since we throw away the exp.db and cant replay it...
-            if costs > 70 and loop_cnt < 50:
+            if costs > 1.0 and loop_cnt < 50:
                 print "Re-training erroneous dataset: c:{:<15f} at loop:{}".format(costs, loop_cnt+1) 
                 sys.stdout.flush()
                 return self.train(states, actions, rewards, terminals, next_states, allow_update, loop_cnt+1)

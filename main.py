@@ -95,9 +95,9 @@ class Runner:
             # Then build the global stuff.
             tf.reset_default_graph()
             with tf.Graph().as_default() as global_graph:
-                with tf.device(tf.train.replica_device_setter(worker_device="/job:worker/task:%d" % FLAGS.task_index, cluster=cluster)):
+                with tf.device(tf.contrib.framework.VariableDeviceChooser(len(ps_hosts))): # round-robin assignment
                     # Assign the variables to parameter servers, build all of the graphs
-                    self.dqn.build_global_variables(nparamservers=len(ps_hosts))  
+                    self.dqn.build_global_variables()  
                     with tf.device("/job:ps/task:0") and tf.name_scope('global_vars'):
                             global_step_var = tf.Variable(0)
                             global_step_inc = global_step_var.assign_add(tf.constant(1))    

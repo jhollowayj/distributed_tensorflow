@@ -67,27 +67,28 @@ if [ "$COMP_SET" = 'full' ]; then
 ####################################################################################
 
 elif [ "$COMP_SET" = 'small' ]; then
-  # ##### PARAMETER SERVERS #####
-  # PS_HOSTNAMES=( reaper potts infinity  ghost santaka morita )
-  # PS_HOSTPORTS=( 2222   2222  2222      2222  2222    2222   )
+  ##### PARAMETER SERVERS #####
   PS_HOSTNAMES=( infinity infinity infinity )
   PS_HOSTPORTS=( 2222    2223   2224 )
 
   ##### WORKERS: LEARNING #####
-  WK_HOSTNAMES_TRAIN=( infinity infinity ) #infinity  infinity )
-  WK_HOSTPORTS_TRAIN=( 2225     2226     ) #2227      2228  )
-  WK_WAT_IDS_TRAIN=("--world_id=1 --task_id=1 --agent_id=1" )
-                    "--world_id=1 --task_id=1 --agent_id=1" 
-                    # "--world_id=1 --task_id=1 --agent_id=1" 
-                    # "--world_id=1 --task_id=1 --agent_id=1" )
+  WK_HOSTNAMES_TRAIN=( infinity infinity infinity infinity infinity infinity )
+  WK_HOSTPORTS_TRAIN=( 2225     2226     2227     2228     2229     2230  )
+  WK_WAT_IDS_TRAIN=("--world_id=1 --task_id=1 --agent_id=1"
+                    "--world_id=1 --task_id=1 --agent_id=2"
+                    "--world_id=1 --task_id=2 --agent_id=1"
+                    "--world_id=1 --task_id=2 --agent_id=3"
+                    "--world_id=1 --task_id=3 --agent_id=2"
+                    "--world_id=1 --task_id=3 --agent_id=3" )
 
   ##### WORKERS: EVALUATORS #####
-  WK_HOSTNAMES_EVAL=( ) # =( infinity infinity )
-  WK_HOSTPORTS_EVAL=( ) # 2229    2230   )
-  WK_WAT_IDS_EVAL=( ) # "--world_id=1 --task_id=1 --agent_id=1 --observer=True"
-                  #  "--world_id=1 --task_id=1 --agent_id=1 --observer=True" )
-                  
+  WK_HOSTNAMES_EVAL=( infinity infinity infinity )
+  WK_HOSTPORTS_EVAL=( 2231     2232     2233   )
+  WK_WAT_IDS_EVAL=( "--world_id=1 --task_id=3 --agent_id=1 --observer=True"
+                    "--world_id=1 --task_id=2 --agent_id=2 --observer=True"
+                    "--world_id=1 --task_id=1 --agent_id=3 --observer=True" )
 fi
+
 #####################################################################################
 
 #####################################################################################

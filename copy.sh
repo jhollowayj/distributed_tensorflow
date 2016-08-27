@@ -12,5 +12,5 @@ if [ "$COMMAND" = 'send_to_fsl' ]; then
     rsync -ru --progress  ./* jacobj66@ssh.fsl.byu.edu:/fslhome/jacobj66/fsl_groups/fslg_pccl/projects/modDNN/ --exclude '.git' --exclude '*.pyc' --exclude '__pycache__' --exclude '.idea' --exclude 'logs/*'
 elif [ "$COMMAND" = 'send_to_pccl' ]; then
     echo "Pulling down from FSL"
-    rsync -ru --progress jacobj66@ssh.fsl.byu.edu:/fslhome/jacobj66/fsl_groups/fslg_pccl/projects/modDNN/ ./ --exclude '.git' --exclude '*.pyc' --exclude '__pycache__' --exclude '.idea' --exclude 'logs/*'
+    rsync -ru --progress jacobj66@ssh.fsl.byu.edu:/fslhome/jacobj66/fsl_groups/fslg_pccl/projects/modDNN/ ./ --exclude '.git' --exclude '*.pyc' --exclude '__pycache__' --exclude '.idea' --exclude 'logs/*' --exclude '*.out'
 fi

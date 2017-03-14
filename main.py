@@ -5,17 +5,9 @@ import GenericAgent
 import time
 import sys
 import numpy as np
+import slurm_cluster_manager as slm
 
 ######################################################################################
-#Flags for defining the tf.train.ClusterSpec
-tf.app.flags.DEFINE_string("ps_hosts", "",
-                           "Comma-separated list of hostname:port pairs")
-tf.app.flags.DEFINE_string("worker_hosts", "",
-                           "Comma-separated list of hostname:port pairs")
-
-#Flags for defining the tf.train.Server
-tf.app.flags.DEFINE_string("job_name", "", "One of 'ps', 'worker'")
-tf.app.flags.DEFINE_integer("task_index", 0, "Index of task within the job")
 
 #Flags for World, Task, Agent
 tf.app.flags.DEFINE_integer("world_id", 1, "Index of world")
@@ -68,24 +60,21 @@ class Runner:
       self.actions = None
       
     def main(self):
-        ps_hosts = self.FLAGS.ps_hosts.split(",")
-        worker_hosts = self.FLAGS.worker_hosts.split(",")
-
         # Create a cluster from the parameter server and worker hosts.
-        cluster = tf.train.ClusterSpec({"ps": ps_hosts, "worker": worker_hosts})
+        cluster, myjob, mytaskid = slm.SlurmClusterManager().build_cluster_spec()
 
         # Create and start a server for the local task.
         gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.1, allow_growth=True)
         server = tf.train.Server(cluster,
-                                job_name=self.FLAGS.job_name,
-                                task_index=self.FLAGS.task_index)
+                                job_name=myjob,
+                                task_index=mytaskid)
                                 # config=tf.ConfigProto(gpu_options=gpu_options)) Will be available in the next release
 
           ##########################################################################################
         if self.FLAGS.job_name == "ps":
             server.join()
         elif self.FLAGS.job_name == "worker":
-            self.build_classes()
+            self.build_classes() # Creates the adgents, the world they live in, the dqn that will learn, etc
     
             # Build local graph/session
             with tf.Graph().as_default() as local_graph:

@@ -164,7 +164,7 @@ class Runner:
                 sv.stop()
 
     def build_classes(self):
-        self.world = JacobsMazeWorld.JacobsMazeWorld(
+        self.world = JacobsMazeWorld.JacobsMazeWorld( # change me for differnt worlds TODO
             world_id = self.FLAGS.world_id,
             task_id  = self.FLAGS.task_id,
             agent_id = self.FLAGS.agent_id,

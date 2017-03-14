@@ -189,7 +189,7 @@ class JacobsMazeWorld(World):
 
     def render(self):
         if self.render_to_console:
-            mazecopy = []
+            mazeCopy = []
             for x in np.array(self.maze):
                 t = []
                 for y in x:
@@ -197,9 +197,9 @@ class JacobsMazeWorld(World):
                         t.append(' ')
                     else: 
                         t.append(str(y.value))
-                mazecopy.append(t) 
-            mazecopy[self.agent_location[0], self.agent_location[1]] = -1
-            print np.array(mazecopy)
+                mazeCopy.append(t) 
+            mazeCopy[self.agent_location[0], self.agent_location[1]] = -1
+            print np.array(mazeCopy)
             print "                              Score:{}  (+ {})".format(m.get_score(), score)
         if self.render_to_cv2:
             if self.window_name is None:
@@ -272,16 +272,16 @@ class JacobsMazeWorld(World):
 
     #######################################################################
 if __name__ == "__main__":
-    m = JacobsMazeWorld()
-    print m.get_state()
+    mazeWorld = JacobsMazeWorld()
+    print mazeWorld.get_state()
     for _ in range(10):
-        score = m.act(0) # go north my son.
-        m.render()
+        score = mazeWorld.act(0) # go north my son.
+        mazeWorld.render()
         
     print "======================================================================="
 
     for _ in range(9):
-        score = m.act(1) # straight home to the morning light!
-        m.render()
-    print m.get_state()
+        score = mazeWorld.act(1) # straight home to the morning light!
+        mazeWorld.render()
+    print mazeWorld.get_state()
     

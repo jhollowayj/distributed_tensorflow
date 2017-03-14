@@ -17,3 +17,5 @@ export PBS_QUEUE=batch
 
 source $HOME/fsl_groups/fslg_pccl/configs/group_bashrc
 srun python $HOME/fsl_groups/fslg_pccl/projects/modDNN/test_nodelistparser.py
+
+# To use: sbatch slurm.sh

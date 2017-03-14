@@ -25,7 +25,7 @@ done
 echo $COMMAND
 
 #####################################################################################
-###          EDDIT THIS PART;  IT WILL FILL OUT THE FORMS FOR YOU                 ###
+###          EDIT THIS PART;  IT WILL FILL OUT THE FORMS FOR YOU                  ###
 ###    (SADLY, I'M NOT SURE IF YOU CAN DO MORE THAN ONE CUDA DEVICE AT A TIME.)   ###
 #####################################################################################
 if [ "$COMP_SET" = 'full' ]; then
@@ -55,14 +55,14 @@ if [ "$COMP_SET" = 'full' ]; then
     WK_HOSTNAMES_EVAL=( morita hatch naga ghost infinity santaka morita hatch naga )
     WK_HOSTPORTS_EVAL=( 2230   2230  2230 2230  2230     2230    2231   2231  2231 )
     WK_WAT_IDS_EVAL=("--world_id=1 --task_id=1 --agent_id=3 --observer=True" 
-                    "--world_id=1 --task_id=2 --agent_id=2 --observer=True"
-                    "--world_id=1 --task_id=3 --agent_id=1 --observer=True"
-                    "--world_id=2 --task_id=1 --agent_id=2 --observer=True"
-                    "--world_id=2 --task_id=2 --agent_id=1 --observer=True"
-                    "--world_id=2 --task_id=3 --agent_id=3 --observer=True"
-                    "--world_id=3 --task_id=1 --agent_id=1 --observer=True"
-                    "--world_id=3 --task_id=2 --agent_id=3 --observer=True"
-                    "--world_id=3 --task_id=3 --agent_id=1 --observer=True" )
+                     "--world_id=1 --task_id=2 --agent_id=2 --observer=True"
+                     "--world_id=1 --task_id=3 --agent_id=1 --observer=True"
+                     "--world_id=2 --task_id=1 --agent_id=2 --observer=True"
+                     "--world_id=2 --task_id=2 --agent_id=1 --observer=True"
+                     "--world_id=2 --task_id=3 --agent_id=3 --observer=True"
+                     "--world_id=3 --task_id=1 --agent_id=1 --observer=True"
+                     "--world_id=3 --task_id=2 --agent_id=3 --observer=True"
+                     "--world_id=3 --task_id=3 --agent_id=1 --observer=True" )
 
 ####################################################################################
 

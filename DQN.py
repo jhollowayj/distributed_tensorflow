@@ -3,6 +3,9 @@ import tensorflow as tf
 import time
 import sys
 
+# CUDA_VISIBLE_DEVICES="0,1"
+# Trying to solve the issue that prevents cuda from finding the gpus
+
 class DQN:
     def __init__(self, wid=1, tid=1, aid=1,
             input_dims = 2, num_act = 4,
@@ -96,7 +99,7 @@ class DQN:
         
         # Build local variables on each computer, sync with server in other functions.
         with tf.variable_scope("worker{}/local".format(worker_id)):
-            with tf.device("/cpu:0"):
+            with tf.device("/gpu:0"):
             
                 size_in = self.params['input_dims']
                 size_L1 = self.params['layer_1_hidden']
@@ -142,7 +145,7 @@ class DQN:
                         self.yj = tf.add(self.rewards, tf.mul(1.0-self.terminals, tf.mul(discount, self.q_t)), name="true_y")
                         self.Q_pred = tf.reduce_sum(tf.mul(self.y, self.actions), reduction_indices=1, name="q_pred")
                         self.cost = tf.reduce_mean(tf.pow(tf.sub(self.yj, self.Q_pred), 2), name="cost")
-                        with tf.device("/cpu:0"):
+                        with tf.device("/gpu:0"):
                             self.rmsprop_min = tf.train.RMSPropOptimizer(
                                 learning_rate=self.params['lr'],
                                 decay=self.params['rms_decay'],
